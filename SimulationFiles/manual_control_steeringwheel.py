@@ -493,7 +493,7 @@ class Agent():
     def __init__(self):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID()
-        self.in_control = False #Comment to False if manual control also comment line 3 of act function
+        self.in_control = True #Comment to False if manual control also comment line 3 of act function
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -510,7 +510,7 @@ class Agent():
         """
         #controls = self.invert_wheel(controls,world)
         #controls = self.speed_limiter(controls,world)
-        #controls,self.in_control = self.pd_controller(controls,world)
+        controls,self.in_control = self.pd_controller(controls,world)
         return controls
     
     def invert_wheel(self,controls,world):
