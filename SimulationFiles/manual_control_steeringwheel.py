@@ -65,6 +65,7 @@ import math
 import random
 import re
 import weakref
+import csv
 
 if sys.version_info >= (3, 0):
 
@@ -551,6 +552,15 @@ class Agent():
             wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
                 waypoints.append(wps[0])
+        if inclusive!=None:
+            data=self.waypoint_fileProcessor('waypointIDS.csv')
+            n=0
+            for i in range(number):
+                if wps[i].id not in data:
+                   wps[i]=None
+                   n+=1
+            if n>0:
+                wps.remove(None)
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -571,6 +581,17 @@ class Agent():
         #print("="*40)
         #print(body_waypoints)
         return body_waypoints
+    
+    def waypointfileProcessor(csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=int(column_data[i][0])
+        return column_data
     
     def waypoints2locations(self,waypoints):
         locations = np.zeros(shape=(len(waypoints),4))
