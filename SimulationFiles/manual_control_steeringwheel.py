@@ -532,7 +532,7 @@ class Agent():
         speed_mps = (math.sqrt(v.x**2 + v.y**2 + v.z**2)) # Vehicle speed meters/sec
         current_time = time.time()
         delta_t = current_time-self.prev_time
-        waypoints = self.find_waypoints(world.player,map)
+        waypoints = self.find_waypoints(world.player,map,inclusive=10)
         a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,cornering_mult=self.cornering_speed_mult)
         # update the prev_time
         self.prev_time = current_time
