@@ -553,10 +553,10 @@ class Agent():
             if len(wps) > 0:
                 waypoints.append(wps[0])
         if inclusive!=None:
-            waypointids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
-            waypointroadids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
-            waypointlaneids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
-            waypointdistances=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
+            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
+            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
+            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
+            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
             for i in range(number+1):
             	if waypoints[i].id not in waypointids:
                    waypoints[i]=1
@@ -587,7 +587,7 @@ class Agent():
         #print(body_waypoints)
         return body_waypoints
     
-    def waypointfileProcessor(self,csv_file):
+    def waypointfileProcessorint(self,csv_file):
         column_data = []
         with open(csv_file) as file:
             reader = csv.reader(file)
@@ -596,6 +596,17 @@ class Agent():
                 column_data.append(row)
             for i in range(len(column_data)):
                  column_data[i]=int(column_data[i][0])
+        return column_data
+    
+    def waypointfileProcessorfloat(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
         return column_data
     
     def waypoints2locations(self,waypoints):
