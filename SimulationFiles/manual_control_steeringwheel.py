@@ -563,7 +563,7 @@ class Agent():
             waypointsnew=[x for x in waypoints if x!=1]
             waypoints=waypointsnew    
         try:
-            print(waypoints[0].id)
+            print(waypoints)
         except(IndexError):
             pass
         # Get vehicle matrix
