@@ -555,10 +555,10 @@ class Agent():
         if inclusive!=None:
             waypointids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
             waypointroadids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
-            waypointlaneids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDS.csv')
+            waypointlaneids=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
             for i in range(number+1):
-            	if waypoints[i].id not in data:
+            	if waypoints[i].id not in waypointids:
                    waypoints[i]=1
             waypointsnew=[x for x in waypoints if x!=1]
             waypoints=waypointsnew    
