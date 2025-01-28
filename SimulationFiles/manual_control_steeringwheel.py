@@ -494,7 +494,7 @@ class Agent():
     def __init__(self):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID()
-        self.in_control = False #Comment to False if manual control also comment line 3 of act function
+        self.in_control = True #Comment to False if manual control also comment line 3 of act function
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -511,7 +511,7 @@ class Agent():
         """
         #controls = self.invert_wheel(controls,world)
         #controls = self.speed_limiter(controls,world)
-        #controls,self.in_control = self.pd_controller(controls,world)
+        controls,self.in_control = self.pd_controller(controls,world)
         return controls
     
     def invert_wheel(self,controls,world):
@@ -553,14 +553,19 @@ class Agent():
             if len(wps) > 0:
                 waypoints.append(wps[0])
         if inclusive!=None:
-            data=self.waypoint_fileProcessor('waypointIDS.csv')
-            n=0
-            for i in range(number):
-                if wps[i].id not in data:
-                   wps[i]=None
-                   n+=1
-            if n>0:
-                wps.remove(None)
+            data=self.waypointfileProcessor('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
+            for i in range(number+1):
+            	if waypoints[i].id not in data:
+                   waypoints[i]=1
+            waypointsnew=[x for x in waypoints if x!=1]
+            waypoints=waypointsnew
+            if len(waypoints)<number:
+            	for i in range(len(waypoints)-1:number):
+            	    
+        try:
+            print(waypoints[0].id)
+        except(IndexError):
+            pass
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -582,7 +587,7 @@ class Agent():
         #print(body_waypoints)
         return body_waypoints
     
-    def waypointfileProcessor(csv_file):
+    def waypointfileProcessor(self,csv_file):
         column_data = []
         with open(csv_file) as file:
             reader = csv.reader(file)
