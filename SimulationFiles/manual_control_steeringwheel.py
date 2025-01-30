@@ -561,7 +561,17 @@ class Agent():
             	if waypoints[i].id not in waypointids:
                    waypoints[i]=1
             waypointsnew=[x for x in waypoints if x!=1]
-            waypoints=waypointsnew    
+            waypoints=waypointsnew
+            if len(waypoints)<number:
+                index=waypointids.index(waypoints[-1].id)
+                for i in range(len(waypoints-1),number):
+                    try:
+                        wps=nwp.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                    except(IndexError):
+                        index=-1
+                        wps=nwp.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                    index+=1
+                    waypoints.append(wps)    
         try:
             print(waypoints[0].id)
         except(IndexError):
