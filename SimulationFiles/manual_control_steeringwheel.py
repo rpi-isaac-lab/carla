@@ -573,7 +573,7 @@ class Agent():
                     index+=1
                     waypoints.append(wps)    
         try:
-            print(waypoints[0].id)
+            print(waypoints)
         except(IndexError):
             pass
         # Get vehicle matrix
