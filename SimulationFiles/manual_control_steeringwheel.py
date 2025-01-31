@@ -65,6 +65,7 @@ import math
 import random
 import re
 import weakref
+import csv
 
 if sys.version_info >= (3, 0):
 
@@ -531,7 +532,7 @@ class Agent():
         speed_mps = (math.sqrt(v.x**2 + v.y**2 + v.z**2)) # Vehicle speed meters/sec
         current_time = time.time()
         delta_t = current_time-self.prev_time
-        waypoints = self.find_waypoints(world.player,map)
+        waypoints = self.find_waypoints(world.player,map,inclusive=10)
         a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,cornering_mult=self.cornering_speed_mult)
         # update the prev_time
         self.prev_time = current_time
@@ -542,15 +543,44 @@ class Agent():
             return controls, True
         return controls, False
     
-    def find_waypoints(self,vehicle,map,number=4,max_dist=20,inclusive=None):
+    def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
         # If inclusive is not None, waypoints must be in list inclusive
+        #This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
         waypoints = [nwp]
+        index=-1
         for i in range(number):
             wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
                 waypoints.append(wps[0])
+        if inclusive!=None:
+            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
+            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
+            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
+            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
+            for i in range(number+1):
+                if waypoints[i].id not in waypointids:
+                    waypoints[i]=1
+            waypointsnew=[x for x in waypoints if x!=1]
+            waypoints=waypointsnew
+            if len(waypoints)<4:
+                try:
+                    index=waypointids.index(waypoints[-1].id)
+                except(IndexError):
+                    pass #Need to find new solution to this, this is the empty waypoint exception
+                for i in range(len(waypoints)-1,4):
+                    try:
+                        wps=map.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                    except(IndexError):
+                        index=-1
+                        wps=map.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                    index+=1
+                    waypoints.append(wps)    
+        #try:
+            #print(waypoints)
+        #except(IndexError):
+            #pass
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -571,6 +601,28 @@ class Agent():
         #print("="*40)
         #print(body_waypoints)
         return body_waypoints
+    
+    def waypointfileProcessorint(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=int(column_data[i][0])
+        return column_data
+    
+    def waypointfileProcessorfloat(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
+        return column_data
     
     def waypoints2locations(self,waypoints):
         locations = np.zeros(shape=(len(waypoints),4))
