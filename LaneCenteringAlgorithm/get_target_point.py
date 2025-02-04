@@ -20,8 +20,8 @@ def circle_line_segment_intersection(circle_center, circle_radius, pt1, pt2, ful
 
     :param circle_center: The (x, y) location of the circle center
     :param circle_radius: The radius of the circle
-    :param pt1: The (x, y) location of the first point of the segment
-    :param pt2: The (x, y) location of the second point of the segment
+    :param pt1: The (x1, y1) location of the first point of the segment
+    :param pt2: The (x2, y2) location of the second point of the segment
     :param full_line: True to find intersections along full line - not just in the segment.  False will just return intersections within the segment.
     :param tangent_tol: Numerical tolerance at which we decide the intersections are close enough to consider it a tangent
     :return Sequence[Tuple[float, float]]: A list of length 0, 1, or 2, where each element is a point at which the circle intercepts a line segment.
