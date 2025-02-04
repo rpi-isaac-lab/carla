@@ -28,18 +28,32 @@ import argparse
 import random
 
 
-def CONE(world,n):
+def CONE(world, n, waypoint_location):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
     """
+
+    map = world.get_map()
     cone_library = world.get_blueprint_library()
-    smol_cone = cone_library.find("static.prop.constructioncone")
-    garbaaaage = cone_library.find("static.prop.container")
+    #smol_cone = cone_library.find("static.prop.constructioncone")
+    #garbaaaage = cone_library.find("static.prop.container")
     cone = cone_library.find("static.prop.trafficcone01")
-    barb = cone_library.find("static.prop.barbeque")
+    #barb = cone_library.find("static.prop.barbeque")
+
+    # if the waypoint location is provided, find the nearest waypoint
+    if waypoint_location:
+        waypoint = map.get_waypoint(carla.Location(*waypoint_location))
+    else:
+        waypoint = None
+
     for i in range(n):
-        spawn = random.choice(world.get_map().get_spawn_points())
+        # if the waypoint location is provided, use this location to spawn the cone
+        if waypoint:
+            spawn = waypoint.transform
+        else: 
+            spawn = random.choice(map.get_waypoint())
+
         this_cone = world.spawn_actor(cone,spawn)
         this_cone.set_enable_gravity(True)
         this_cone.set_simulate_physics(True)
@@ -62,8 +76,13 @@ if __name__ == "__main__":
         help='TCP port to listen to (default: 2000)')
 
     args = argparser.parse_args()
-
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
-    CONE(world,1000)
+
+    if args.x is not None and args.y is not None and args.z is not None:
+        waypoint_location = (args.x, args.y, args.z)
+    else:
+        waypoint_location = None
+
+    CONE(world, 1000, waypoint_location)

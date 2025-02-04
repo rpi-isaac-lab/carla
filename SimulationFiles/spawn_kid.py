@@ -25,7 +25,7 @@ def spawn_kid(world,n):
     kid = library.find("walker.pedestrian.0004")
     for i in range(n):
         # Find a random spawn from the map
-        spawn = random.choice(world.get_map().get_spawn_points())
+        spawn = random.choice(world.get_map().get_waypoint()) # change this to spawn at specific waypoints
         # Instantiate the object
         this_kid = world.spawn_actor(kid,spawn)
         # Gravity
