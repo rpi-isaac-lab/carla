@@ -36,10 +36,7 @@ def CONE(world, n, waypoint_location):
 
     map = world.get_map()
     cone_library = world.get_blueprint_library()
-    #smol_cone = cone_library.find("static.prop.constructioncone")
-    #garbaaaage = cone_library.find("static.prop.container")
     cone = cone_library.find("static.prop.trafficcone01")
-    #barb = cone_library.find("static.prop.barbeque")
 
     # if the waypoint location is provided, find the nearest waypoint
     if waypoint_location:
