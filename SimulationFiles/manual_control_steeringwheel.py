@@ -46,8 +46,8 @@ except IndexError:
 # -- Katie Pure Pursuit Control Loading ----------------------------------------
 # ==============================================================================
 
-sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
-from pure_pursuit import PurePursuit,PurePursuitPlusPID
+sys.path.append(os.path.join(this_dir,".."))
+from LaneCenteringAlgorithm.pure_pursuit import PurePursuit,PurePursuitPlusPID
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -260,10 +260,13 @@ class DualControl(object):
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
 
+    # parse input
     def parse_events(self, world, clock):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return True
+
+            # controller input
             elif event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 0:
                     world.restart()
@@ -277,7 +280,8 @@ class DualControl(object):
                     self._control.gear = 1 if self._control.reverse else -1
                 elif event.button == 23:
                     world.camera_manager.next_sensor()
-
+            
+            # keyboard input
             elif event.type == pygame.KEYUP:
                 if self._is_quit_shortcut(event.key):
                     return True
@@ -299,6 +303,8 @@ class DualControl(object):
                     world.camera_manager.set_sensor(event.key - 1 - K_0)
                 elif event.key == K_r:
                     world.camera_manager.toggle_recording()
+
+                # vehicle controls
                 if isinstance(self._control, carla.VehicleControl):
                     if event.key == K_q:
                         self._control.gear = 1 if self._control.reverse else -1
@@ -422,6 +428,8 @@ class BlendedControl(DualControl):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return True
+
+            # controller input
             elif event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 0:
                     world.restart()
@@ -435,7 +443,8 @@ class BlendedControl(DualControl):
                     self._control.gear = 1 if self._control.reverse else -1
                 elif event.button == 23:
                     world.camera_manager.next_sensor()
-
+            
+            # keyboard input
             elif event.type == pygame.KEYUP:
                 if self._is_quit_shortcut(event.key):
                     return True
@@ -474,16 +483,35 @@ class BlendedControl(DualControl):
                         world.player.set_autopilot(self._autopilot_enabled)
                         world.hud.notification('Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
 
+        # autopilot off
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
+                # get manual control
                 self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
                 self._parse_vehicle_wheel()
+
                 # This is where you would add the call to the Agent
-                self._control = self._agent.act(self._control,world) #This is where the blending would happen, set up a blend function
+                agent_control = self._agent.act(self._control,world)
+                blend_controls(agent_control, 0.5)
+
                 self._control.reverse = self._control.gear < 0
             elif isinstance(self._control, carla.WalkerControl):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
             world.player.apply_control(self._control)
+
+        # blend a new control into self._control
+        # note that our agent only returns throttle, steer, and brake
+        def blend_controls(agent_control, weight):
+            self._control.throttle = interp(self._control.throttle, agent_control.throttle)
+            self._control.steer = interp(self._control.steer, agent_control.steer)
+            self._control.brake = interp(self.control.brake, agent_control.brake)
+
+        # interpolate between values a and b
+        # weight = 0 is a, weight = 1 is b
+        def interp(a, b, weight):
+            return a + (b - a) * weight
+
+
 
 
 # ==============================================================================
