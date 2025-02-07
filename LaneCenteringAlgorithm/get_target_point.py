@@ -30,10 +30,10 @@ def circle_line_segment_intersection(circle_center, circle_radius, pt1, pt2, ful
     """
 
     (p1x, p1y), (p2x, p2y), (cx, cy) = pt1, pt2, circle_center
-    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy)
-    dx, dy = (x2 - x1), (y2 - y1)
-    dr = (dx ** 2 + dy ** 2)**.5
-    big_d = x1 * y2 - x2 * y1
+    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy) #distance between the center and pt1, distance between the center and pt2
+    dx, dy = (x2 - x1), (y2 - y1) #distance between pt1 and pt2 in x,y 
+    dr = (dx ** 2 + dy ** 2)**.5  #direct distance between pt1 and pt2
+    big_d = x1 * y2 - x2 * y1     #If we consider the center as (0,0), and view pt1 and pt2 as a vector. And pt1 and pt2 together and form a matrix. It looks like determinant.
     discriminant = circle_radius ** 2 * dr ** 2 - big_d ** 2
 
     if discriminant < 0:  # No intersection between circle and line
