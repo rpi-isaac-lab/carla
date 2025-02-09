@@ -18,19 +18,25 @@ import argparse
 import random
 
 
-def spawn_kid(world,n):
+def spawn_kid(world, n, waypoint_location):
     # Get the blueprint library from the world
     library = world.get_blueprint_library()
     # Use the identifier from the blueprint library to search for the blueprint
     kid = library.find("walker.pedestrian.0004")
+
+    if waypoint_location:
+        waypoint = map.get_waypoint(carla.Location(*waypoint_location))
+    else:
+        waypoint = None
+
     for i in range(n):
-        # Find a random spawn from the map
-        spawn = random.choice(world.get_map().get_waypoint()) # change this to spawn at specific waypoints
-        # Instantiate the object
+        if waypoint:
+            spawn = waypoint.transform
+        else:
+            spawn = random.choice(map.get_waypoint())
+
         this_kid = world.spawn_actor(kid,spawn)
-        # Gravity
         this_kid.set_enable_gravity(True)
-        # Decides whether or not it will go flying
         this_kid.set_simulate_physics(True)
     return
 
@@ -55,4 +61,10 @@ if __name__ == "__main__":
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
-    spawn_kid(world,10)
+
+    if args.x is not None and args.y is not None and args.z is not None:
+        waypoint_location = (args.x, args.y, args.z)
+    else:
+        waypoint_location = None
+
+    spawn_kid(world, 10, waypoint_location)
