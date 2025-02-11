@@ -46,8 +46,8 @@ except IndexError:
 # -- Katie Pure Pursuit Control Loading ----------------------------------------
 # ==============================================================================
 
-sys.path.append(os.path.join(this_dir,".."))
-from LaneCenteringAlgorithm.pure_pursuit import PurePursuit,PurePursuitPlusPID
+sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
+from pure_pursuit import PurePursuit,PurePursuitPlusPID
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -419,6 +419,18 @@ class BlendedControl(DualControl):
         """
         super().__init__(world,False)
         self._agent = agent
+        
+    # blend a new control into self._control
+    # note that our agent only returns throttle, steer, and brake   
+    def blend_controls(self,agent_control, weight):
+            self._control.throttle = self.interp(self._control.throttle, agent_control.throttle,weight)
+            self._control.steer = self.interp(self._control.steer, agent_control.steer,weight)
+            self._control.brake = self.interp(self._control.brake, agent_control.brake,weight)
+            
+    # interpolate between values a and b
+    # weight = 0 is a, weight = 1 is b
+    def interp(self,a, b, weight):
+        return a + (b - a) * weight
 
     def parse_events(self, world, clock):
         """
@@ -492,24 +504,13 @@ class BlendedControl(DualControl):
 
                 # This is where you would add the call to the Agent
                 agent_control = self._agent.act(self._control,world)
-                blend_controls(agent_control, 0.5)
+                self.blend_controls(agent_control, 0.5)
 
                 self._control.reverse = self._control.gear < 0
             elif isinstance(self._control, carla.WalkerControl):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
             world.player.apply_control(self._control)
 
-        # blend a new control into self._control
-        # note that our agent only returns throttle, steer, and brake
-        def blend_controls(agent_control, weight):
-            self._control.throttle = interp(self._control.throttle, agent_control.throttle)
-            self._control.steer = interp(self._control.steer, agent_control.steer)
-            self._control.brake = interp(self.control.brake, agent_control.brake)
-
-        # interpolate between values a and b
-        # weight = 0 is a, weight = 1 is b
-        def interp(a, b, weight):
-            return a + (b - a) * weight
 
 
 
