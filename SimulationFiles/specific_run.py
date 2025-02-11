@@ -16,25 +16,29 @@ import carla
 
 import argparse
 import random
+import math
 
+from cone import CONE
 
-def spawn_kid(world, waypoints):
-    map = world.get_map()
-    # Get the blueprint library from the world
-    library = world.get_blueprint_library()
-    # Use the identifier from the blueprint library to search for the blueprint
-    kid = library.find("walker.pedestrian.0004")
+passed_count = {}
 
-    for road_id, lane_id, s in waypoints:
-        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
-        if waypoint:
-            spawn = waypoint.transform
-            this_kid = world.spawn_actor(kid,spawn)
-            this_kid.set_enable_gravity(True)
-            this_kid.set_simulate_physics(True)
-    return
+def get_dist(vehicle_loc, specific_point):
+    return math.sqrt((vehicle_loc.x - specific_point[0])**2 + (vehicle_loc.y - specific_point[1])**2 + (vehicle_loc.z - specific_point[2])**2)
 
-def parse_file(filename, world, n):
+def track_vehicle(world, vehicle, specific_point, waypoint):
+    global passed_count
+    vehicle_id = vehicle.id
+    while True:
+        transform = vehicle.get_transform()
+        vehicle_loc = transform.location
+        if get_dist(vehicle_loc, specific_point) < 5.0: # within 5 meters
+            if vehicle_id not in passed_count:
+                passed_count[vehicle_id] = 0
+            passed_count[vehicle_id] += 1
+            if passed_count[vehicle_id] == 2:
+                CONE(world, waypoint)
+
+def parse_file(filename, world, vehicle, n):
     waypoints = []
     with open(filename, 'r') as file:
         for line in file:
@@ -45,12 +49,11 @@ def parse_file(filename, world, n):
             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
             waypoints.append((road_id, lane_id, s))
     
-    if n > len(waypoints):
-        n = len(waypoints) # avoids indexing errors
-    
-    waypoints_used = random.sample(waypoints, n)
-    spawn_kid(world, waypoints_used)
-
+    # point to keep track of when counting laps
+    specific_point = waypoints[0]
+    # waypoint to spawn the cone
+    waypoint = random.sample(waypoints, n)
+    track_vehicle(world, vehicle, specific_point, waypoint)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -68,9 +71,10 @@ if __name__ == "__main__":
         help='TCP port to listen to (default: 2000)')
 
     args = argparser.parse_args()
-
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
 
-    parse_file("waypoints.csv", world, 1)
+    vehicle = world.get_actors().filter('vehicle*')[0]
+
+    parse_file('recreatewaypoint.csv', world, vehicle, 1)

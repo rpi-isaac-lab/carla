@@ -28,7 +28,7 @@ import argparse
 import random
 
 
-def CONE(world, n, waypoint_location):
+def CONE(world, waypoints):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
@@ -38,23 +38,31 @@ def CONE(world, n, waypoint_location):
     cone_library = world.get_blueprint_library()
     cone = cone_library.find("static.prop.trafficcone01")
 
-    # if the waypoint location is provided, find the nearest waypoint
-    if waypoint_location:
-        waypoint = map.get_waypoint(carla.Location(*waypoint_location))
-    else:
-        waypoint = None
-
-    for i in range(n):
-        # if the waypoint location is provided, use this location to spawn the cone
+    for road_id, lane_id, s in waypoints:
+        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
         if waypoint:
             spawn = waypoint.transform
-        else: 
-            spawn = random.choice(map.get_waypoint())
-
-        this_cone = world.spawn_actor(cone,spawn)
-        this_cone.set_enable_gravity(True)
-        this_cone.set_simulate_physics(True)
+            this_cone = world.spawn_actor(cone,spawn)
+            this_cone.set_enable_gravity(True)
+            this_cone.set_simulate_physics(True)
     return
+
+def parse_file(filename, world, n):
+    waypoints = []
+    with open(filename, 'r') as file:
+        for line in file:
+            parts = line.strip().split(',')
+            if len(parts) < 5:
+                continue # skip lines that don't have enough data
+            _, _, road_id, lane_id, s = parts # ignore time and id
+            road_id, lane_id, s = int(road_id), int(lane_id), float(s)
+            waypoints.append((road_id, lane_id, s))
+    
+    if n > len(waypoints):
+        n = len(waypoints) # avoids indexing errors
+    
+    waypoints_used = random.sample(waypoints, n)
+    CONE(world, waypoints_used)
 
 
 if __name__ == "__main__":
@@ -77,9 +85,4 @@ if __name__ == "__main__":
     client.set_timeout(2.0)
     world = client.get_world()
 
-    if args.x is not None and args.y is not None and args.z is not None:
-        waypoint_location = (args.x, args.y, args.z)
-    else:
-        waypoint_location = None
-
-    CONE(world, 1000, waypoint_location)
+    parse_file('recreatewaypoint.csv', world, 1)
