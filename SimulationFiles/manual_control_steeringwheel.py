@@ -156,6 +156,8 @@ class World(object):
         self._actor_filter = actor_filter
         self.restart()
         self.world.on_tick(hud.on_world_tick)
+        
+        self.logger = logging.getlogger('csv_logger')
 
     def restart(self):
         # Keep same camera config if the camera manager exists.
@@ -259,6 +261,8 @@ class DualControl(object):
         self._reverse_idx = int(self._parser.get('G29 Racing Wheel', 'reverse'))
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
+
+        self.logger = logging.getlogger('csv_logger')
 
     # parse input
     def parse_events(self, world, clock):
@@ -1095,18 +1099,66 @@ class CameraManager(object):
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
 
+class CSVHandler(logging.Handler):
+    def __init__(self, filename, headers):
+        super().__init__()
+        self.filename = filename
+        self.headers = headers
+
+        self.file = open(self.filename, mode='w', newline='')
+        self.writer = csv.DictWriter(self.file, fieldnames=self.headers)
+        
+        if self.file.tell() == 0:
+            self.writer.writeheader()
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.write.writerow(log_entry)
+        self.file.flush() # flushes immediately in case of crash
+
+    def close(self):
+        self.file.close()
+        super().close()
+
+class CSVFormatter(logging.Formatter):
+    def __init__(self, headers):
+        super().__init__()
+        self.headers = headers
+
+    def format(self, record):
+        log_data = {header: getattr(record, header, '') for header in self.headers}
+        return log_data
+
+def setup_logger(filename, headers):
+    logger = logging.getLogger('csv_logger')
+    logger.setLevel(logging.INFO)
+
+    csv_handler = CSVHandler(filename, headers)
+    csv_formatter = CSVFormatter(headers)
+
+    csv_handler.setFormatter(csv_formatter)
+    logger.addHandler(csv_handler)
+    
+    return logger
 
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
-
+# Main game function
 def game_loop(args):
     pygame.init()
     pygame.font.init()
     world = None
 
     try:
+        # initialize logger
+        headers = ['time elapsed', 'steering angle', 'collision', 'lane breach']
+        csv_filename = 'log.csv'
+
+        logger = setup_logger(csv_filename, headers)
+
+        # initialize carla and controllers
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1121,6 +1173,8 @@ def game_loop(args):
         hud.add_controller(controller)
 
         clock = pygame.time.Clock()
+
+        # render loop
         while True:
             clock.tick_busy_loop(60)
             if controller.parse_events(world, clock):
