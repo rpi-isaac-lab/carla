@@ -1113,7 +1113,7 @@ class CSVHandler(logging.Handler):
 
     def emit(self, record):
         log_entry = self.format(record)
-        self.write.writerow(log_entry)
+        self.writer.writerow(log_entry)
         self.file.flush() # flushes immediately in case of crash
 
     def close(self):
@@ -1141,6 +1141,18 @@ def setup_logger(filename, headers):
     
     return logger
 
+'''
+Access the logger with logger = logger.getLogger('csv_logger')
+Write to it normally using logger.info("Log message", extra = {})
+where extra is a dictionary
+
+    logger.info("User logged in", extra={"time elapsed": "0.01", "steering angle": "100"})
+
+Currently, the logger must take in these parameters as strings and
+also creates the file in the directory where the file was run. It
+also prints out a log message to console. 
+'''
+
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
@@ -1153,10 +1165,12 @@ def game_loop(args):
 
     try:
         # initialize logger
-        headers = ['time elapsed', 'steering angle', 'collision', 'lane breach']
+        headers = ['time elapsed', 'steering angle']
         csv_filename = 'log.csv'
 
         logger = setup_logger(csv_filename, headers)
+
+        #logger.info("User logged in", extra={"time elapsed": "0.01", "steering angle": "100"})
 
         # initialize carla and controllers
         client = carla.Client(args.host, args.port)
