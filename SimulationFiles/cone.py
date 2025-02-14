@@ -46,20 +46,22 @@ def CONE(world, waypoints):
             this_cone.set_enable_gravity(True)
             this_cone.set_simulate_physics(True)
     return
-
+ 
 def parse_file(filename, world, n):
     waypoints = []
     with open(filename, 'r') as file:
         for line in file:
             parts = line.strip().split(',')
+            # skip lines that don't have enough data
             if len(parts) < 5:
-                continue # skip lines that don't have enough data
-            _, _, road_id, lane_id, s = parts # ignore time and id
+                continue
+            _, _, road_id, lane_id, s = parts
             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
             waypoints.append((road_id, lane_id, s))
-    
+
+    # avoids indexing errors
     if n > len(waypoints):
-        n = len(waypoints) # avoids indexing errors
+        n = len(waypoints)
     
     waypoints_used = random.sample(waypoints, n)
     CONE(world, waypoints_used)
