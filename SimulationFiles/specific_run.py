@@ -13,6 +13,7 @@ except IndexError:
     pass
 
 import carla
+import csv
  
 import argparse
 import random
@@ -39,23 +40,38 @@ def track_vehicle(world, vehicle, specific_point, waypoint):
             if passed_count[vehicle_id] == 2:
                 CONE(world, waypoint)
 
-def parse_file(filename, world, vehicle, n):
-    waypoints = []
-    with open(filename, 'r') as file:
-        for line in file:
-            parts = line.strip().split(',')
-            # skip lines that don't have enough data
-            if len(parts) < 5:
-                continue
-            _, _, road_id, lane_id, s = parts
-            road_id, lane_id, s = int(road_id), int(lane_id), float(s)
-            waypoints.append((road_id, lane_id, s))
+def waypointfileProcessorint(self, csv_file, world, vehicle, n):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i] = int(column_data[i][0])
+        # point to keep track of when counting laps
+        specific_point = column_data[0]
+        # waypoint to spawn the cone
+        waypoint = random.sample(column_data, n)
+        track_vehicle(world, vehicle, specific_point, waypoint)
+
+# def parse_file(filename, world, vehicle, n):
+#     waypoints = []
+#     with open(filename, 'r') as file:
+#         for line in file:
+#             parts = line.strip().split(',')
+#             # skip lines that don't have enough data
+#             if len(parts) < 5:
+#                 continue
+#             _, _, road_id, lane_id, s = parts
+#             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
+#             waypoints.append((road_id, lane_id, s))
     
-    # point to keep track of when counting laps
-    specific_point = waypoints[0]
-    # waypoint to spawn the cone
-    waypoint = random.sample(waypoints, n)
-    track_vehicle(world, vehicle, specific_point, waypoint)
+#     # point to keep track of when counting laps
+#     specific_point = waypoints[0]
+#     # waypoint to spawn the cone
+#     waypoint = random.sample(waypoints, n)
+#     track_vehicle(world, vehicle, specific_point, waypoint)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -79,4 +95,4 @@ if __name__ == "__main__":
 
     vehicle = world.get_actors().filter('vehicle*')[0]
 
-    parse_file('recreatewaypoint.csv', world, vehicle, 1)
+    waypointfileProcessorint('recreatewaypoint.csv', world, vehicle, 1)
