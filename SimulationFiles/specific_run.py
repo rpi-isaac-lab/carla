@@ -14,28 +14,33 @@ except IndexError:
 
 import carla
 import csv
-
+ 
 import argparse
 import random
+import math
 
+from cone import CONE
 
-def spawn_kid(world, waypoints):
-    map = world.get_map()
-    # Get the blueprint library from the world
-    library = world.get_blueprint_library()
-    # Use the identifier from the blueprint library to search for the blueprint
-    kid = library.find("walker.pedestrian.0004")
+passed_count = {}
 
-    for road_id, lane_id, s in waypoints:
-        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
-        if waypoint:
-            spawn = waypoint.transform
-            this_kid = world.spawn_actor(kid,spawn)
-            this_kid.set_enable_gravity(True)
-            this_kid.set_simulate_physics(True)
-    return
+def get_dist(vehicle_loc, specific_point):
+    return math.sqrt((vehicle_loc.x - specific_point[0])**2 + (vehicle_loc.y - specific_point[1])**2 + (vehicle_loc.z - specific_point[2])**2)
 
-def waypointfileProcessorint(self, csv_file, world, n):
+def track_vehicle(world, vehicle, specific_point, waypoint):
+    global passed_count
+    vehicle_id = vehicle.id
+    while True:
+        transform = vehicle.get_transform()
+        vehicle_loc = transform.location
+        # if distance is within 5 meters - can be changed this was just for testing
+        if get_dist(vehicle_loc, specific_point) < 5.0:
+            if vehicle_id not in passed_count:
+                passed_count[vehicle_id] = 0
+            passed_count[vehicle_id] += 1
+            if passed_count[vehicle_id] == 2:
+                CONE(world, waypoint)
+
+def waypointfileProcessorint(self, csv_file, world, vehicle, n):
         column_data = []
         with open(csv_file) as file:
             reader = csv.reader(file)
@@ -44,10 +49,13 @@ def waypointfileProcessorint(self, csv_file, world, n):
                 column_data.append(row)
             for i in range(len(column_data)):
                  column_data[i] = int(column_data[i][0])
-        waypoints_used = random.sample(column_data, n)
-        spawn_kid(world, waypoints_used)
- 
-# def parse_file(filename, world, n):
+        # point to keep track of when counting laps
+        specific_point = column_data[0]
+        # waypoint to spawn the cone
+        waypoint = random.sample(column_data, n)
+        track_vehicle(world, vehicle, specific_point, waypoint)
+
+# def parse_file(filename, world, vehicle, n):
 #     waypoints = []
 #     with open(filename, 'r') as file:
 #         for line in file:
@@ -59,13 +67,11 @@ def waypointfileProcessorint(self, csv_file, world, n):
 #             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
 #             waypoints.append((road_id, lane_id, s))
     
-#     # avoids indexing errors
-#     if n > len(waypoints):
-#         n = len(waypoints)
-    
-#     waypoints_used = random.sample(waypoints, n)
-#     spawn_kid(world, waypoints_used)
-
+#     # point to keep track of when counting laps
+#     specific_point = waypoints[0]
+#     # waypoint to spawn the cone
+#     waypoint = random.sample(waypoints, n)
+#     track_vehicle(world, vehicle, specific_point, waypoint)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -83,9 +89,10 @@ if __name__ == "__main__":
         help='TCP port to listen to (default: 2000)')
 
     args = argparser.parse_args()
-
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
 
-    waypointfileProcessorint("waypoints.csv", world, 10)
+    vehicle = world.get_actors().filter('vehicle*')[0]
+
+    waypointfileProcessorint('recreatewaypoint.csv', world, vehicle, 1)
