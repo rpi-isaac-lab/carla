@@ -16,12 +16,11 @@ import carla
 import csv
 
 import argparse
-
 import time
 
 from cone import CONE
 
-def preload_simulation(world, spawn_instructions):
+def simulation_file(world, spawn_instructions):
     waypoints = []
     start_time = time.time()
 
@@ -33,10 +32,12 @@ def preload_simulation(world, spawn_instructions):
         elapsed_time = time.time() - start_time
         remaining_time = spawn_time - elapsed_time
 
+        # wait until the spawn time is reached
         if remaining_time > 0:
             time.sleep(remaining_time)
             
         waypoint = world.get_map().get_waypoint_xodr(road_id, lane_id, s)
+        # getting a list of waypoints to spawn objects
         if waypoint:
             waypoints.append(waypoint)
             
@@ -74,4 +75,4 @@ if __name__ == "__main__":
     world = client.get_world()
 
     spawn_instructions = waypointfileProcessorint('ExactObjectWaypoints.csv')
-    preload_simulation(world, spawn_instructions)
+    simulation_file(world, spawn_instructions)

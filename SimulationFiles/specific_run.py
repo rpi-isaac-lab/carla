@@ -32,7 +32,7 @@ def track_vehicle(world, vehicle, specific_point, waypoint):
     while True:
         transform = vehicle.get_transform()
         vehicle_loc = transform.location
-        # if distance is within 5 meters - can be changed this was just for testing
+        # if distance is within 5 meters - this can be changed as it was just for testing
         if get_dist(vehicle_loc, specific_point) < 5.0:
             if vehicle_id not in passed_count:
                 passed_count[vehicle_id] = 0
@@ -54,24 +54,6 @@ def waypointfileProcessorint(self, csv_file, world, vehicle, n):
         # waypoint to spawn the cone
         waypoint = random.sample(column_data, n)
         track_vehicle(world, vehicle, specific_point, waypoint)
-
-# def parse_file(filename, world, vehicle, n):
-#     waypoints = []
-#     with open(filename, 'r') as file:
-#         for line in file:
-#             parts = line.strip().split(',')
-#             # skip lines that don't have enough data
-#             if len(parts) < 5:
-#                 continue
-#             _, _, road_id, lane_id, s = parts
-#             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
-#             waypoints.append((road_id, lane_id, s))
-    
-#     # point to keep track of when counting laps
-#     specific_point = waypoints[0]
-#     # waypoint to spawn the cone
-#     waypoint = random.sample(waypoints, n)
-#     track_vehicle(world, vehicle, specific_point, waypoint)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(

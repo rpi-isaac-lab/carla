@@ -46,26 +46,6 @@ def waypointfileProcessorint(self, csv_file, world, n):
                  column_data[i] = int(column_data[i][0])
         waypoints_used = random.sample(column_data, n)
         spawn_kid(world, waypoints_used)
- 
-# def parse_file(filename, world, n):
-#     waypoints = []
-#     with open(filename, 'r') as file:
-#         for line in file:
-#             parts = line.strip().split(',')
-#             # skip lines that don't have enough data
-#             if len(parts) < 5:
-#                 continue
-#             _, _, road_id, lane_id, s = parts
-#             road_id, lane_id, s = int(road_id), int(lane_id), float(s)
-#             waypoints.append((road_id, lane_id, s))
-    
-#     # avoids indexing errors
-#     if n > len(waypoints):
-#         n = len(waypoints)
-    
-#     waypoints_used = random.sample(waypoints, n)
-#     spawn_kid(world, waypoints_used)
-
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
