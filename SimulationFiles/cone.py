@@ -29,7 +29,7 @@ import argparse
 import random
 
 
-def CONE(world, waypointroadids,waypointlaneids,waypointdistances):
+def CONE(world, waypointroadids,waypointlaneids,waypointdistances,obstacletype):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
@@ -37,7 +37,7 @@ def CONE(world, waypointroadids,waypointlaneids,waypointdistances):
 
     map = world.get_map()
     cone_library = world.get_blueprint_library()
-    cone = cone_library.find("static.prop.trafficcone01")
+    cone = cone_library.find(obstacletype)
 
     for i in range(len(waypointroadids)):
         waypoint = map.get_waypoint_xodr(waypointroadids[i], waypointlaneids[i], waypointdistances[i])
@@ -96,4 +96,5 @@ if __name__ == "__main__":
     waypointdistances=waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
     
     
-    CONE(world,waypointroadids,waypointlaneids,waypointdistances)
+    CONE(world,waypointroadids,waypointlaneids,waypointdistances,"static.prop.trafficcone01")
+    
