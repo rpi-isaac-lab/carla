@@ -23,28 +23,42 @@ except IndexError:
     pass
 
 import carla
+import csv
 
 import argparse
 import random
 
 
-def CONE(world,n):
+def CONE(world, waypoints):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
     """
+
+    map = world.get_map()
     cone_library = world.get_blueprint_library()
-    smol_cone = cone_library.find("static.prop.constructioncone")
-    garbaaaage = cone_library.find("static.prop.container")
     cone = cone_library.find("static.prop.trafficcone01")
-    barb = cone_library.find("static.prop.barbeque")
-    for i in range(n):
-        spawn = random.choice(world.get_map().get_spawn_points())
-        this_cone = world.spawn_actor(cone,spawn)
-        this_cone.set_enable_gravity(True)
-        this_cone.set_simulate_physics(True)
+
+    for road_id, lane_id, s in waypoints:
+        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
+        if waypoint:
+            spawn = waypoint.transform
+            this_cone = world.spawn_actor(cone,spawn)
+            this_cone.set_enable_gravity(True)
+            this_cone.set_simulate_physics(True)
     return
 
+def waypointfileProcessorint(self, csv_file, world, n):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i] = int(column_data[i][0])
+        waypoints_used = random.sample(column_data, n)
+        CONE(world, waypoints_used)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -62,8 +76,8 @@ if __name__ == "__main__":
         help='TCP port to listen to (default: 2000)')
 
     args = argparser.parse_args()
-
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
-    CONE(world,1000)
+
+    waypointfileProcessorint('recreatewaypoint.csv', world, 10)

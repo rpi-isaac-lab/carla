@@ -13,27 +13,39 @@ except IndexError:
     pass
 
 import carla
+import csv
 
 import argparse
 import random
 
 
-def spawn_kid(world,n):
+def spawn_kid(world, waypoints):
+    map = world.get_map()
     # Get the blueprint library from the world
     library = world.get_blueprint_library()
     # Use the identifier from the blueprint library to search for the blueprint
     kid = library.find("walker.pedestrian.0004")
-    for i in range(n):
-        # Find a random spawn from the map
-        spawn = random.choice(world.get_map().get_spawn_points())
-        # Instantiate the object
-        this_kid = world.spawn_actor(kid,spawn)
-        # Gravity
-        this_kid.set_enable_gravity(True)
-        # Decides whether or not it will go flying
-        this_kid.set_simulate_physics(True)
+
+    for road_id, lane_id, s in waypoints:
+        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
+        if waypoint:
+            spawn = waypoint.transform
+            this_kid = world.spawn_actor(kid,spawn)
+            this_kid.set_enable_gravity(True)
+            this_kid.set_simulate_physics(True)
     return
 
+def waypointfileProcessorint(self, csv_file, world, n):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i] = int(column_data[i][0])
+        waypoints_used = random.sample(column_data, n)
+        spawn_kid(world, waypoints_used)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -55,4 +67,5 @@ if __name__ == "__main__":
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
-    spawn_kid(world,10)
+
+    waypointfileProcessorint("waypoints.csv", world, 10)
