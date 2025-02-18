@@ -523,7 +523,7 @@ class Agent():
     def __init__(self):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID()
-        self.in_control = True #Comment to False if manual control also comment line 3 of act function
+        self.in_control = False #Comment to False if manual control also comment line 3 of act function
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -540,7 +540,7 @@ class Agent():
         """
         #controls = self.invert_wheel(controls,world)
         #controls = self.speed_limiter(controls,world)
-        controls,self.in_control = self.pd_controller(controls,world)
+        #controls,self.in_control = self.pd_controller(controls,world)
         return controls
     
     def invert_wheel(self,controls,world):
@@ -584,10 +584,10 @@ class Agent():
             if len(wps) > 0:
                 waypoints.append(wps[0])
         if inclusive!=None:
-            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
-            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
-            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
-            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
+            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/waypointIDS.csv')
+            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/WaypointRoadIDS.csv')
+            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/WaypointLaneIDs.csv')
+            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/Data/PythonAPI/max_testing/WaypointDistances.csv')
             for i in range(number+1):
                 if waypoints[i].id not in waypointids:
                     waypoints[i]=1
