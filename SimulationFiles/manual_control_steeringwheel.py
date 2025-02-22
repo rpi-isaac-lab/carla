@@ -61,6 +61,8 @@ import argparse
 import collections
 import datetime
 import logging
+import socket
+import json
 import math
 import random
 import re
@@ -157,8 +159,6 @@ class World(object):
         self.restart()
         self.world.on_tick(hud.on_world_tick)
         
-        self.logger = logging.getlogger('csv_logger')
-
     def restart(self):
         # Keep same camera config if the camera manager exists.
         cam_index = self.camera_manager.index if self.camera_manager is not None else 0
@@ -262,7 +262,6 @@ class DualControl(object):
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
 
-        self.logger = logging.getlogger('csv_logger')
 
     # parse input
     def parse_events(self, world, clock):
@@ -1099,59 +1098,16 @@ class CameraManager(object):
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
 
-class CSVHandler(logging.Handler):
-    def __init__(self, filename, headers):
-        super().__init__()
-        self.filename = filename
-        self.headers = headers
-
-        self.file = open(self.filename, mode='w', newline='')
-        self.writer = csv.DictWriter(self.file, fieldnames=self.headers)
-        
-        if self.file.tell() == 0:
-            self.writer.writeheader()
-
-    def emit(self, record):
-        log_entry = self.format(record)
-        self.writer.writerow(log_entry)
-        self.file.flush() # flushes immediately in case of crash
-
-    def close(self):
-        self.file.close()
-        super().close()
-
-class CSVFormatter(logging.Formatter):
-    def __init__(self, headers):
-        super().__init__()
-        self.headers = headers
-
-    def format(self, record):
-        log_data = {header: getattr(record, header, '') for header in self.headers}
-        return log_data
-
-def setup_logger(filename, headers):
-    logger = logging.getLogger('csv_logger')
-    logger.setLevel(logging.INFO)
-
-    csv_handler = CSVHandler(filename, headers)
-    csv_formatter = CSVFormatter(headers)
-
-    csv_handler.setFormatter(csv_formatter)
-    logger.addHandler(csv_handler)
-    
-    return logger
-
 '''
-Access the logger with logger = logger.getLogger('csv_logger')
-Write to it normally using logger.info("Log message", extra = {})
-where extra is a dictionary
+Send data to log server
+Data must be a dictionary with headers specified
 
-    logger.info("User logged in", extra={"time elapsed": "0.01", "steering angle": "100"})
-
-Currently, the logger must take in these parameters as strings and
-also creates the file in the directory where the file was run. It
-also prints out a log message to console. 
+    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
 '''
+def send_log_message(data, host='localhost', port=5000):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+        client_socket.connect((host, port))
+        client_socket.sendall(json.dumps(data).encode('utf-8'))
 
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
@@ -1164,14 +1120,6 @@ def game_loop(args):
     world = None
 
     try:
-        # initialize logger
-        headers = ['time elapsed', 'steering angle']
-        csv_filename = 'log.csv'
-
-        logger = setup_logger(csv_filename, headers)
-
-        #logger.info("User logged in", extra={"time elapsed": "0.01", "steering angle": "100"})
-
         # initialize carla and controllers
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
