@@ -19,15 +19,15 @@ import argparse
 import random
 
 
-def spawn_kid(world, waypoints):
+def spawn_kid(world, waypointroadids, waypointlaneids, waypointdistances, obstacletype):
     map = world.get_map()
     # Get the blueprint library from the world
     library = world.get_blueprint_library()
     # Use the identifier from the blueprint library to search for the blueprint
-    kid = library.find("walker.pedestrian.0004")
+    kid = library.find(obstacletype)
 
-    for road_id, lane_id, s in waypoints:
-        waypoint = map.get_waypoint_xodr(road_id, lane_id, s)
+    for i in range(len(waypointroadids)):
+        waypoint = map.get_waypoint_xodr(waypointroadids[i], waypointlaneids[i], waypointdistances[i])
         if waypoint:
             spawn = waypoint.transform
             this_kid = world.spawn_actor(kid,spawn)
@@ -35,7 +35,7 @@ def spawn_kid(world, waypoints):
             this_kid.set_simulate_physics(True)
     return
 
-def waypointfileProcessorint(self, csv_file, world, n):
+def waypointfileProcessorint(csv_file):
         column_data = []
         with open(csv_file) as file:
             reader = csv.reader(file)
@@ -44,8 +44,18 @@ def waypointfileProcessorint(self, csv_file, world, n):
                 column_data.append(row)
             for i in range(len(column_data)):
                  column_data[i] = int(column_data[i][0])
-        waypoints_used = random.sample(column_data, n)
-        spawn_kid(world, waypoints_used)
+        return column_data
+       
+def waypointfileProcessorfloat(csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
+        return column_data
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -68,4 +78,8 @@ if __name__ == "__main__":
     client.set_timeout(2.0)
     world = client.get_world()
 
-    waypointfileProcessorint("waypoints.csv", world, 10)
+    waypointroadids = waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv')
+    waypointlaneids = waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv')
+    waypointdistances = waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
+    
+    spawn_kid(world, waypointroadids, waypointlaneids, waypointdistances, "walker.pedestrian.0004")
