@@ -20,30 +20,29 @@ import time
 
 from cone import CONE
 
-def simulation_file(world, spawn_instructions):
-    waypoints = []
-    start_time = time.time()
+# spawns objects (cones) at 5 waypoints at a time, resetting the previous bjects and spawning new ones after each lap
 
-    # sort the spawn instructions by time
-    spawn_instructions.sort(key=lambda x: x[0])
+def reset(world, waypointroadids, waypointlaneids, waypointdistances, object_type, start_index):
+    actors = world.get_actors().filter(object_type)
+    for actor in actors:
+        actor.destroy()
+    end_index = min(start_index + 5, len(waypointroadids))
+    CONE(world, waypointroadids[start_index:end_index], waypointlaneids[start_index:end_index], waypointdistances[start_index:end_index], object_type) 
 
-    for instruction in spawn_instructions:
-        spawn_time, _, road_id, lane_id, s = instruction
-        elapsed_time = time.time() - start_time
-        remaining_time = spawn_time - elapsed_time
+def simulation_file(world, vehicle, waypointroadids, waypointlaneids, waypointdistances, object_type, vehicle_spawn):
+    lap_count = 0
+    spawn_index = waypointroadids.index(vehicle_spawn.road_id)
+    reset(world, waypointroadids, waypointlaneids, waypointdistances, object_type, spawn_index)
+    
+    while lap_count < 5:
+        current_pos = vehicle.get_location()
+        if current_pos.distance(vehicle_spawn.transform.location) < 5.0:
+            lap_count += 1
+            spawn_index = (spawn_index + 5) % len(waypointroadids)
+            reset(world, waypointroadids, waypointlaneids, waypointdistances, object_type, spawn_index)
+        time.sleep(1)
 
-        # wait until the spawn time is reached
-        if remaining_time > 0:
-            time.sleep(remaining_time)
-            
-        waypoint = world.get_map().get_waypoint_xodr(road_id, lane_id, s)
-        # getting a list of waypoints to spawn objects
-        if waypoint:
-            waypoints.append(waypoint)
-            
-    CONE(world, waypoints)
-
-def waypointfileProcessorint(self, csv_file):
+def waypointfileProcessorint(csv_file):
     column_data = []
     with open(csv_file) as file:
         reader = csv.reader(file)
@@ -53,6 +52,17 @@ def waypointfileProcessorint(self, csv_file):
         for i in range(len(column_data)):
             column_data[i] = int(column_data[i][0])
     return column_data
+
+def waypointfileProcessorfloat(csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
+        return column_data
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -73,6 +83,12 @@ if __name__ == "__main__":
     client = carla.Client(args.host, args.port)
     client.set_timeout(2.0)
     world = client.get_world()
+    vehicle = world.get_actors().find('vehicle.*')
 
-    spawn_instructions = waypointfileProcessorint('ExactObjectWaypoints.csv')
-    simulation_file(world, spawn_instructions)
+    vehicle_spawn = map.get_waypoint(vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving))
+
+    waypointroadids = waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv')
+    waypointlaneids = waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv')
+    waypointdistances = waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
+
+    simulation_file(world, vehicle, waypointroadids, waypointlaneids, waypointdistances, "static.prop.trafficcone01", vehicle_spawn)
