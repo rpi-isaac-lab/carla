@@ -605,7 +605,7 @@ class Agent():
             for i in range(number+1):
                 if waypoints[i].id not in waypointids:
                     waypoints[i]=1
-            waypointsnew=[x for x in waypoints if x!=1]
+            waypointsnew=[x for x in waypoints if x!=1] # maybe needs fixing?
             waypoints=waypointsnew
             if len(waypoints)<4:
                 try:
