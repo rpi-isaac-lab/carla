@@ -48,6 +48,7 @@ except IndexError:
 
 sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
+from mpc_control import pursuitplusMPC #import other controller
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -66,6 +67,8 @@ import random
 import re
 import weakref
 import csv
+import socket
+import json
 
 if sys.version_info >= (3, 0):
 
@@ -171,15 +174,24 @@ class World(object):
             blueprint.set_attribute('color', "196,30,58")
         # Spawn the player.
         if self.player is not None:
+            spawn_point = carla.Transform(Location(x=-49.1, y=-194.5, z=1), Rotation(yaw=0))
+            """
             spawn_point = self.player.get_transform()
             spawn_point.location.z += 2.0
             spawn_point.rotation.roll = 0.0
             spawn_point.rotation.pitch = 0.0
+            """
             self.destroy()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            
         while self.player is None:
+            """
             spawn_points = self.world.get_map().get_spawn_points()
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
+            self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            """
+            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=0.2), carla.Rotation(yaw=0))
+            blueprint_library = self.world.get_blueprint_library()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
@@ -522,7 +534,9 @@ class BlendedControl(DualControl):
 class Agent():
     def __init__(self):
         #self.speed_limit = 70
-        self.pp = PurePursuitPlusPID()
+        self.pp = PurePursuitPlusPID() #Uncomment for PID
+        #waypoints=self.createwaypointlist()
+        #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
         self.in_control = False #Comment to False if manual control also comment line 3 of act function
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
@@ -584,10 +598,10 @@ class Agent():
             if len(wps) > 0:
                 waypoints.append(wps[0])
         if inclusive!=None:
-            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/waypointIDS.csv')
-            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/WaypointRoadIDS.csv')
-            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/Data/max_testing/WaypointLaneIDs.csv')
-            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/Data/PythonAPI/max_testing/WaypointDistances.csv')
+            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
+            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
+            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
+            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
             for i in range(number+1):
                 if waypoints[i].id not in waypointids:
                     waypoints[i]=1
@@ -662,7 +676,17 @@ class Agent():
             loc_2 = [carla_loc.x,carla_loc.y]
             locations[i,:] = np.array(loc_4)
         return locations
-            
+        
+    def createwaypointlist(self):
+        waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
+        waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
+        waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
+        waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
+        waypoints=[]
+        for i in range(len(waypointids)):
+            wps=map.get_waypoint_xodr(waypointroadids[i],waypointlaneids[i],waypointdistances[i])
+            waypoints.append(wps)
+        return waypoints
 
 
 
@@ -814,7 +838,7 @@ class HUD(object):
         ## BEGIN MAX_ADDED_BIT
         # This bit makes the box on the screen that handles the speedometer 
         # and autodrive warning
-        speed_size = [200,100]
+        """speed_size = [200,100]
         speedometer = pygame.Surface(speed_size)
         if self.autodrive:
             speedometer.fill(pygame.color.Color(0,0,0))
@@ -831,7 +855,7 @@ class HUD(object):
         display.blit(auto_drive,speedometer_loc)
         ## END MAX_ADDED_BIT
         self._notifications.render(display)
-        self.help.render(display)
+        self.help.render(display)""" #uncomment for HUD
 
     def add_controller(self,controller):
         self.controller = controller
@@ -1094,6 +1118,20 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
+
+# ==============================================================================
+# -- Logger() ---------------------------------------------------------------
+# ==============================================================================
+'''
+Send data to log server
+Data must be a dictionary with headers specified
+
+    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
+'''
+def send_log_message(data, host='localhost', port=5000):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+        client_socket.connect((host, port))
+        client_socket.sendall(json.dumps(data).encode('utf-8'))
 
 
 # ==============================================================================
