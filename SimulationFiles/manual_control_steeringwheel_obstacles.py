@@ -1126,18 +1126,21 @@ class CameraManager(object):
 # -- ObstacleSpawning() ---------------------------------------------------------------
 # ==============================================================================
 class Obstacles():
-    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,world):
+    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,worldobject,worldcarla):
         """A function to intialize an Obstacles spawing object
         
         Given: 
         waypointroadids: The string of the location of the csv file with waypoint roadids
         waypointlaneids: The string of the location of the csv file with waypoint laneids
         waypointdistances: The string of the location of the csv file with waypoint distances
+        worldobject: The world as the object class defined in this file
+        worldcarla: The carla world object
         """
         self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
         self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
         self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
-        self.world=world
+        self.worldobject=worldobject
+        self.worldcarla=worldcarla
     
     def waypointfileProcessorint(self,csv_file):
         column_data = []
@@ -1162,26 +1165,29 @@ class Obstacles():
         return column_data
         
     def reset(self, object_type, start_index):
-        actors = self.world.get_actors().filter(object_type)
+        actors = self.worldcarla.get_actors().filter(object_type)
         for actor in actors:
             actor.destroy()
         end_index = min(start_index + 5, len(self.waypointroadids))
-        CONE(self.world, self.waypointroadids[start_index:end_index], self.waypointlaneids[start_index:end_index], self.waypointdistances[start_index:end_index], object_type)
+        CONE(self.worldcarla, self.waypointroadids[start_index:end_index], self.waypointlaneids[start_index:end_index], self.waypointdistances[start_index:end_index], object_type)
         
     def simulation_file(self,object_type):
         #vehicle = self.world.get_actors().find('vehicle.*') # fix this, can't find vehicle
-        vehicle = self.world.player
+        vehicle = self.worldobject.player
+        map = self.worldcarla.get_map()
         vehicle_spawn = map.get_waypoint(vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving))
         lap_count = 0
         spawn_index = self.waypointroadids.index(vehicle_spawn.road_id)
-        self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+        #self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+        self.reset(object_type, spawn_index)
     
         while lap_count < 5:
             current_pos = vehicle.get_location()
             if current_pos.distance(vehicle_spawn.transform.location) < 5.0:
                 lap_count += 1
                 spawn_index = (spawn_index + 5) % len(self.waypointroadids)
-                self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+                #self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+                self.reset(object_type, spawn_index)
             time.sleep(1)
 
 # ==============================================================================
@@ -1223,7 +1229,7 @@ def game_loop(args):
         controller = BlendedControl(world,agent)
         hud.add_controller(controller)
         
-        obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',client.get_world())
+        obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',world,client.get_world())
         obstacles.simulation_file("static.prop.trafficcone01")
 
         clock = pygame.time.Clock()
