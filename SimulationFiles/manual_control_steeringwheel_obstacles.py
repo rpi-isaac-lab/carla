@@ -1166,21 +1166,22 @@ class Obstacles():
         for actor in actors:
             actor.destroy()
         end_index = min(start_index + 5, len(self.waypointroadids))
-        CONE(world, self.waypointroadids[start_index:end_index], self.waypointlaneids[start_index:end_index], self.waypointdistances[start_index:end_index], object_type)
+        CONE(self.world, self.waypointroadids[start_index:end_index], self.waypointlaneids[start_index:end_index], self.waypointdistances[start_index:end_index], object_type)
         
     def simulation_file(self,object_type):
-        vehicle = self.world.get_actors().find('vehicle.*')
+        #vehicle = self.world.get_actors().find('vehicle.*') # fix this, can't find vehicle
+        vehicle = self.world.player
         vehicle_spawn = map.get_waypoint(vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving))
         lap_count = 0
         spawn_index = self.waypointroadids.index(vehicle_spawn.road_id)
-        reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+        self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
     
         while lap_count < 5:
             current_pos = vehicle.get_location()
             if current_pos.distance(vehicle_spawn.transform.location) < 5.0:
                 lap_count += 1
                 spawn_index = (spawn_index + 5) % len(self.waypointroadids)
-                reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+                self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
             time.sleep(1)
 
 # ==============================================================================
