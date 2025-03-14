@@ -60,7 +60,7 @@ also prints out a log message to console.
 # End server with KeyboardInterrupt
 def start_logger_server(host='localhost', port=5000):
     # Initialize logger with headers and filename
-    headers = ['time elapsed', 'steering angle']
+    headers = ['time elapsed', 'steering angle', 'collision', 'lane breach']
     csv_filename = 'log.csv'
 
     logger = setup_logger(csv_filename, headers)
@@ -83,6 +83,7 @@ def start_logger_server(host='localhost', port=5000):
                         if not data:
                             break
                         data_dict = json.loads(data)
+                        print(data_dict)
                         logger.info("log", extra=data_dict)
 
         # Create daemon and run

@@ -929,6 +929,11 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
+        
+        # log it
+        logger = Logger()
+        logger.log({'collision': 'yes'})
+
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -962,6 +967,10 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
+
+        # log it
+        logger = Logger()
+        logger.log({'lane breach': 'yes'})
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1109,6 +1118,23 @@ def send_log_message(data, host='localhost', port=5000):
         client_socket.connect((host, port))
         client_socket.sendall(json.dumps(data).encode('utf-8'))
 
+class Logger:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._start_time = None
+        return cls._instance
+
+    def start(self):
+        self._start_time = time.time()
+
+    def log(self, data):
+        elapsed = time.time() - self._start_time
+        data['time elapsed'] = elapsed
+        send_log_message(data)
+
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
@@ -1120,6 +1146,9 @@ def game_loop(args):
     world = None
 
     try:
+        logger = Logger()
+        logger.start()
+        
         # initialize carla and controllers
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
@@ -1136,14 +1165,23 @@ def game_loop(args):
 
         clock = pygame.time.Clock()
 
+        interval = 1000
+        elapsed = 0
         # render loop
         while True:
-            clock.tick_busy_loop(60)
+            dt = clock.tick_busy_loop(60)
             if controller.parse_events(world, clock):
                 return
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
+
+            elapsed += dt
+            if(elapsed > interval):
+                logger.log({
+                    'steering angle': str(controller._control.steer),
+                })
+                elapsed = 0
 
     finally:
 
