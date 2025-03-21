@@ -57,6 +57,8 @@ from mpc_control import pursuitplusMPC #import other controller
 import carla
 
 from carla import ColorConverter as cc
+from sklearn.neighbors import KDTree
+import numpy as np
 
 import argparse
 import collections
@@ -586,6 +588,20 @@ class Agent():
             return controls, True
         return controls, False
     
+    def filter_waypoints(self, waypoints, waypointids, radius=1.0):
+        coordinates = np.array([[waypoint.transform.location.x, waypoint.transform.location.y] for waypoint in waypoints])
+        tree = KDTree(coordinates, leaf_size=30, metric='euclidean')
+
+        filtered = []
+        for waypoint in waypoints:
+            if waypoint.id in waypointids:
+                filtered.append(waypoint)
+            else: 
+                indices = tree.query_radius([[waypoint.transform.location.x, waypoint.transform.location.y]], r=radius)
+                if any(waypoints[i] in waypoints for i in indices[0]):
+                    filtered.append(waypoint)
+        return filtered
+    
     def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
         # If inclusive is not None, waypoints must be in list inclusive
@@ -602,10 +618,13 @@ class Agent():
             waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
             waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
-            for i in range(number+1):
-                if waypoints[i].id not in waypointids:
-                    waypoints[i]=1
-            waypointsnew=[x for x in waypoints if x!=1] # maybe needs fixing?
+            # fix this loop
+            waypointsnew=self.filter_waypoints(waypoints,waypointids)
+            # for i in range(number+1):
+            #     if waypoints[i].id not in waypointids:
+            #         waypoints[i]=1
+            # waypointsnew=[x for x in waypoints if x!=1]
+            # until here
             waypoints=waypointsnew
             if len(waypoints)<4:
                 try:
