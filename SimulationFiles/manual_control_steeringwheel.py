@@ -119,7 +119,7 @@ except ImportError:
 # ==============================================================================
 
 # Not pretty, but functional
-import test_ff
+#import test_ff
 
 
 # ==============================================================================
@@ -1106,18 +1106,6 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
-
-'''
-Send data to log server
-Data must be a dictionary with headers specified
-
-    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
-'''
-def send_log_message(data, host='localhost', port=5000):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.connect((host, port))
-        client_socket.sendall(json.dumps(data).encode('utf-8'))
-
 class Logger:
     _instance = None
 
@@ -1129,11 +1117,27 @@ class Logger:
 
     def start(self):
         self._start_time = time.time()
+        self._host = 'localhost'
+        self._port = 5000
+        self._client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        try:
+            self._client_socket.connect((self._host, self._port))
+        except Exception:
+            print('Could not connect to server')
 
+    def stop(self):
+        self._client_socket.close()
+
+    
+    '''
+    Send data to log server
+    Data must be a dictionary with headers specified
+    '''
     def log(self, data):
         elapsed = time.time() - self._start_time
-        data['time elapsed'] = elapsed
-        send_log_message(data)
+        data['time elapsed'] = f"{elapsed:.3f}"
+        self._client_socket.sendall(json.dumps(data).encode('utf-8'))
 
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
@@ -1148,6 +1152,7 @@ def game_loop(args):
     try:
         logger = Logger()
         logger.start()
+        logger.log({'collision': 'yes'})
         
         # initialize carla and controllers
         client = carla.Client(args.host, args.port)
