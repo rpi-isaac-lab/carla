@@ -588,20 +588,6 @@ class Agent():
             return controls, True
         return controls, False
     
-    def filter_waypoints(self, waypoints, waypointids, radius=1.0):
-        coordinates = np.array([[waypoint.transform.location.x, waypoint.transform.location.y] for waypoint in waypoints])
-        tree = KDTree(coordinates, leaf_size=30, metric='euclidean')
-
-        filtered = []
-        for waypoint in waypoints:
-            if waypoint.id in waypointids:
-                filtered.append(waypoint)
-            else: 
-                indices = tree.query_radius([[waypoint.transform.location.x, waypoint.transform.location.y]], r=radius)
-                if any(waypoints[i] in waypoints for i in indices[0]):
-                    filtered.append(waypoint)
-        return filtered
-    
     def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
         # If inclusive is not None, waypoints must be in list inclusive
@@ -619,7 +605,9 @@ class Agent():
             waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
             # fix this loop
-            waypointsnew=self.filter_waypoints(waypoints,waypointids)
+            ids = np.array(waypointids).reshape(-1, 1)
+            kd_tree = KDTree(ids)
+            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query([waypoint.id])[0] == 0]
             # for i in range(number+1):
             #     if waypoints[i].id not in waypointids:
             #         waypoints[i]=1
