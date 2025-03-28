@@ -42,6 +42,7 @@ def get_target_point(lookahead, polyline):
         intersections += segment_intersections
 
     # Filter out points that are behind the vehicle (x <= 0)
+    # filtered = [p for p in intersections if p[0] > 0] The folowing is revised.
     filtered = [
     p for p in intersections
     if p[0] > 0 and abs(np.arctan2(p[1], p[0])) > np.pi / 4
