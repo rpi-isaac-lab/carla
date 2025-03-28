@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+
 def get_target_point(lookahead, polyline):
     """
     Determines the target point for the Pure Pursuit controller.
