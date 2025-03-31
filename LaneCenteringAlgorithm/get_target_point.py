@@ -1,82 +1,48 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Nov 15 13:11:21 2024
-
-@author: searsk
-"""
-"""
-A module that finds the point on the path we are trying to target.
-
-More info here: https://thomasfermi.github.io/Algorithms-for-Automated-Driving/Control/PurePursuit.html
-Originial Code from here: https://github.com/thomasfermi/Algorithms-for-Automated-Driving/blob/master/code/solutions/control/get_target_point.py
-"""
-
-import numpy as np
-import random
-
-# Function from https://stackoverflow.com/a/59582674/2609987
-def circle_line_segment_intersection(circle_center, circle_radius, pt1, pt2, full_line=True, tangent_tol=1e-9):
-    """ Find the points at which a circle intersects a line-segment.  This can happen at 0, 1, or 2 points.
-
-    :param circle_center: The (x, y) location of the circle center
-    :param circle_radius: The radius of the circle
-    :param pt1: The (x1, y1) location of the first point of the segment
-    :param pt2: The (x2, y2) location of the second point of the segment
-    :param full_line: True to find intersections along full line - not just in the segment.  False will just return intersections within the segment.
-    :param tangent_tol: Numerical tolerance at which we decide the intersections are close enough to consider it a tangent
-    :return Sequence[Tuple[float, float]]: A list of length 0, 1, or 2, where each element is a point at which the circle intercepts a line segment.
-
-    Note: We follow: http://mathworld.wolfram.com/Circle-LineIntersection.html
-    """
-
-    (p1x, p1y), (p2x, p2y), (cx, cy) = pt1, pt2, circle_center
-    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy) #distance between the center and pt1, distance between the center and pt2
-    dx, dy = (x2 - x1), (y2 - y1) #distance between pt1 and pt2 in x,y 
-    dr = (dx ** 2 + dy ** 2)**.5  #direct distance between pt1 and pt2
-    big_d = x1 * y2 - x2 * y1     #If we consider the center as (0,0), and view pt1 and pt2 as a vector. And pt1 and pt2 together and form a matrix. It looks like determinant.
-    discriminant = circle_radius ** 2 * dr ** 2 - big_d ** 2
-
-    if discriminant < 0:  # No intersection between circle and line
-        return []
-    else:  # There may be 0, 1, or 2 intersections with the segment
-        intersections = [
-            (cx + (big_d * dy + sign * (-1 if dy < 0 else 1) * dx * discriminant**.5) / dr ** 2,
-             cy + (-big_d * dx + sign * abs(dy) * discriminant**.5) / dr ** 2)
-            for sign in ((1, -1) if dy < 0 else (-1, 1))]  # This makes sure the order along the segment is correct
-        if not full_line:  # If only considering the segment, filter out intersections that do not fall within the segment
-            fraction_along_segment = [(xi - p1x) / dx if abs(dx) > abs(dy) else (yi - p1y) / dy for xi, yi in intersections]
-            intersections = [pt for pt, frac in zip(intersections, fraction_along_segment) if 0 <= frac <= 1]
-        if len(intersections) == 2 and abs(discriminant) <= tangent_tol:  # If line is tangent to circle, return just one point (as both intersections have same location)
-            return [intersections[0]]
-        else:
-            return intersections
-
 def get_target_point(lookahead, polyline):
-    """ Determines the target point for the pure pursuit controller
-    
+    """
+    Determines the target point for the Pure Pursuit controller.
+
     Parameters
     ----------
     lookahead : float
-        The target point is on a circle of radius `lookahead`
-        The circle's center is (0,0)
-    poyline: array_like, shape (M,2)
-        A list of 2d points that defines a polyline.
+        The radius of the lookahead circle, centered at the vehicle's rear axle (assumed to be at (0, 0)).
     
-    Returns:
-    --------
-    target_point: numpy array, shape (,2)
-        Point with positive x-coordinate where the circle of radius `lookahead`
-        and the polyline intersect. 
-        Return None if there is no such point.  
-        If there are multiple such points, return the one that the polyline
-        visits first.
+    polyline : array_like, shape (M, 2)
+        A list of 2D points representing the path to follow. Each consecutive pair defines a segment of the path.
+
+    Returns
+    -------
+    target_point : numpy array, shape (2,)
+        A point where the lookahead circle intersects the path, lies in front of the vehicle (x > 0),
+        and has a direction angle |arctan(y/x)| > π/4 (i.e., at least 45° off from straight ahead).
+        Returns the first such point found in path order.
+        Returns None if no valid intersection exists.
     """
     intersections = []
-    for j in range(len(polyline)-1):
+
+    # Loop through each segment in the path
+    for j in range(len(polyline) - 1):
         pt1 = polyline[j]
-        pt2 = polyline[j+1]
-        intersections += circle_line_segment_intersection((0,0), lookahead, pt1, pt2, full_line=False)
-    filtered = [p for p in intersections if p[0]>0]
-    if len(filtered)==0:
+        pt2 = polyline[j + 1]
+
+        # Get intersection points between this segment and the lookahead circle
+        segment_intersections = circle_line_segment_intersection(
+            (0, 0),        # center of the lookahead circle (vehicle rear axle)
+            lookahead,     # radius of the lookahead circle
+            pt1, pt2,      # endpoints of the current segment
+            full_line=False  # only consider the finite line segment, not the infinite line
+        )
+        intersections += segment_intersections
+
+    # Filter intersection points:
+    # 1. Must be in front of the vehicle (x > 0)
+    # 2. Must have angle |arctan(y/x)| > π/4 (i.e., more than 45 degrees off from forward)
+    filtered = [
+        p for p in intersections
+        if p[0] > 0 and abs(np.arctan2(p[1], p[0])) > np.pi / 4
+    ]
+
+    # Return the first valid target point if any
+    if len(filtered) == 0:
         return None
     return filtered[0]
