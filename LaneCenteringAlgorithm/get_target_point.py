@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 def get_target_point(lookahead, polyline):
     """
     Determines the target point for the Pure Pursuit controller.
@@ -15,42 +13,36 @@ def get_target_point(lookahead, polyline):
     Returns
     -------
     target_point : numpy array, shape (2,)
-        A point with a positive x-coordinate where the lookahead circle intersects the path.
-        If multiple such points exist, returns the first one encountered along the path.
-        Returns None if no valid intersection is found.
-
-    Notes
-    -----
-    - This function checks each line segment of the polyline for intersections with the lookahead circle.
-    - Only intersection points that lie within the segment (not on the extended line) and are in front of the vehicle (x > 0) are considered valid.
-    - The first valid intersection in the order of the path is returned as the target point.
+        A point where the lookahead circle intersects the path, lies in front of the vehicle (x > 0),
+        and has a direction angle |arctan(y/x)| > π/4 (i.e., at least 45° off from straight ahead).
+        Returns the first such point found in path order.
+        Returns None if no valid intersection exists.
     """
     intersections = []
 
-    # Loop over all consecutive point pairs (line segments) in the polyline
+    # Loop through each segment in the path
     for j in range(len(polyline) - 1):
         pt1 = polyline[j]
         pt2 = polyline[j + 1]
 
-        # Find intersection(s) between the current segment and the lookahead circle
+        # Get intersection points between this segment and the lookahead circle
         segment_intersections = circle_line_segment_intersection(
-            (0, 0),            # center of the lookahead circle
-            lookahead,         # radius of the lookahead circle
-            pt1, pt2,          # endpoints of the current segment
-            full_line=False    # restrict to segment only (not infinite line)
+            (0, 0),        # center of the lookahead circle (vehicle rear axle)
+            lookahead,     # radius of the lookahead circle
+            pt1, pt2,      # endpoints of the current segment
+            full_line=False  # only consider the finite line segment, not the infinite line
         )
         intersections += segment_intersections
 
-    # Filter out points that are behind the vehicle (x <= 0)
-    # filtered = [p for p in intersections if p[0] > 0] The folowing is revised.
+    # Filter intersection points:
+    # 1. Must be in front of the vehicle (x > 0)
+    # 2. Must have angle |arctan(y/x)| > π/4 (i.e., more than 45 degrees off from forward)
     filtered = [
-    p for p in intersections
-    if p[0] > 0 and abs(np.arctan2(p[1], p[0])) > np.pi / 4
+        p for p in intersections
+        if p[0] > 0 and abs(np.arctan2(p[1], p[0])) > np.pi / 4
     ]
 
-    filtered = [p for p in intersections if p[0] > 0]
-
-    # Return the first valid point in path order, or None if none exist
+    # Return the first valid target point if any
     if len(filtered) == 0:
         return None
     return filtered[0]
