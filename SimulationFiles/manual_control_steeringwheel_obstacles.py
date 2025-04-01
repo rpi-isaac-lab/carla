@@ -148,9 +148,10 @@ def get_actor_display_name(actor, truncate=250):
 
 
 class World(object):
-    def __init__(self, carla_world, hud, actor_filter):
+    def __init__(self, carla_world, hud, actor_filter, obstacles):
         self.world = carla_world
         self.hud = hud
+        self.obstacles = obstacles
         self.player = None
         self.collision_sensor = None
         self.lane_invasion_sensor = None
@@ -229,6 +230,8 @@ class World(object):
             if sensor is not None:
                 sensor.stop()
                 sensor.destroy()
+        if self.obstacles is not None:
+            self.obstacles.unspawn_obstacles()
         if self.player is not None:
             self.player.destroy()
 
@@ -1235,6 +1238,12 @@ class Obstacles():
             return True
         else:
             return False
+    
+    def unspawn_obstacles(self):
+        for i in range(len(self.obstacletypes)):
+            actors = self.worldcarla.get_actors().filter(self.obstacletypes[i])
+        for actor in actors:
+            actor.destroy()
         
 
 # ==============================================================================
@@ -1287,12 +1296,14 @@ def game_loop(args):
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         hud = HUD(args.width, args.height)
-        world = World(client.get_world(), hud, args.filter)
+        obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsObjectType.csv',world,client.get_world(),hud.simulation_time,agent)
+        obstacles.simulation_file()
+        world = World(client.get_world(), hud, args.filter, obstacles)
         agent = Agent()
         controller = BlendedControl(world,agent)
         hud.add_controller(controller)
-        obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsObjectType.csv',world,client.get_world(),hud.simulation_time,agent)
-        obstacles.simulation_file()
+        # obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsObjectType.csv',world,client.get_world(),hud.simulation_time,agent)
+        # obstacles.simulation_file()
         
         clock = pygame.time.Clock()
         interval=1000
