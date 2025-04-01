@@ -607,7 +607,7 @@ class Agent():
             # fix this loop
             ids = np.array(waypointids).reshape(-1, 1)
             kd_tree = KDTree(ids)
-            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query([waypoint.id])[0] == 0]
+            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query(np.array([[waypoint.id]]))[0] == 0]
             # for i in range(number+1):
             #     if waypoints[i].id not in waypointids:
             #         waypoints[i]=1
