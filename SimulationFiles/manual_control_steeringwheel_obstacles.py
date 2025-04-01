@@ -1242,8 +1242,8 @@ class Obstacles():
     def unspawn_obstacles(self):
         for i in range(len(self.obstacletypes)):
             actors = self.worldcarla.get_actors().filter(self.obstacletypes[i])
-        for actor in actors:
-            actor.destroy()
+            for actor in actors:
+                actor.destroy()
         
 
 # ==============================================================================
