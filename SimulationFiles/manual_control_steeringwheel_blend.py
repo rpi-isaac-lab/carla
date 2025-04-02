@@ -57,6 +57,8 @@ from mpc_control import pursuitplusMPC #import other controller
 import carla
 
 from carla import ColorConverter as cc
+from sklearn.neighbors import KDTree
+import numpy as np
 
 import argparse
 import collections
@@ -585,6 +587,7 @@ class Agent():
             controls.steer = steer
             return controls, True
         return controls, False
+
     
     def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
@@ -602,10 +605,18 @@ class Agent():
             waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
             waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
+            ids = np.array(waypointids).reshape(-1, 1)
+            kd_tree = KDTree(ids)
+            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query(np.array([[waypoint.id]]))[0] == 0]
+            # fix this loop
+            #ids = np.array(waypointids).reshape(-1, 1)
+            #kd_tree = KDTree(ids)
+            #waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query([waypoint.id])[0] == 0]
             for i in range(number+1):
-                if waypoints[i].id not in waypointids:
-                    waypoints[i]=1
+                 if waypoints[i].id not in waypointids:
+                     waypoints[i]=1
             waypointsnew=[x for x in waypoints if x!=1]
+            # until here
             waypoints=waypointsnew
             if len(waypoints)<4:
                 try:
@@ -950,10 +961,6 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
-        #log it
-        logger = Logger()
-        logger.log({'collision': 'yes'})
-        ###
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -987,10 +994,6 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-        #Log it
-        logger = Logger()
-        logger.log({'lane breach': 'yes'})
-        ##
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1141,21 +1144,7 @@ def send_log_message(data, host='localhost', port=5000):
         client_socket.connect((host, port))
         client_socket.sendall(json.dumps(data).encode('utf-8'))
 
-class Logger:
-    _instance = None
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._start_time = None
-        return cls._instance
-    
-    def start(self):
-        self._start_time = time.time()
-        
-    def log(self, data):
-        elapsed = time.time() - self._start_time
-        data['time elapsed'] = elapsed
-        send_log_message(data)
+
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
@@ -1167,8 +1156,6 @@ def game_loop(args):
     world = None
 
     try:
-        logger = Logger()
-        logger.start()
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1183,35 +1170,13 @@ def game_loop(args):
         hud.add_controller(controller)
 
         clock = pygame.time.Clock()
-        interval=1000
-        elapsed=0
         while True:
-            dt=clock.tick_busy_loop(60)
+            clock.tick_busy_loop(60)
             if controller.parse_events(world, clock):
                 return
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
-            
-            elapsed+=dt
-            if (elapsed>interval):
-                #Uncomment to test logger
-                t = world.player.get_transform()
-                pos_x = t.location.x
-                pos_y = t.location.y
-                pos_z = t.location.z
-                pitch = t.rotation.pitch
-                roll = t.rotation.roll
-                yaw = t.rotation.yaw
-                v = world.player.get_velocity()
-                vel_x = v.x
-                vel_y = v.y
-                vel_z = v.z
-                steer = world.player.get_control().steer #add data here to get it added to log file
-                logger.log({
-                   'steering angle': str(steer), 'X position': str(pos_x),'Y position':str(pos_y),'Z position':str(pos_z),'Pitch': str(pitch),'Roll': str(roll), 'Yaw': str(yaw), 'X velocity': str(vel_x), 'Y velocity': str(vel_y), 'Z velocity':str(vel_z)
-                   })
-                elapsed=0
 
     finally:
 
