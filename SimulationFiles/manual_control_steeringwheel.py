@@ -605,9 +605,8 @@ class Agent():
             waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
             # fix this loop
-            ids = np.array(waypointids).reshape(-1, 1)
-            kd_tree = KDTree(ids)
-            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if kd_tree.query(np.array([[waypoint.id]]))[0] == 0]
+            ids = set(waypointids)
+            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if waypoint.id in ids]
             # for i in range(number+1):
             #     if waypoints[i].id not in waypointids:
             #         waypoints[i]=1
