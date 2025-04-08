@@ -60,7 +60,7 @@ also prints out a log message to console.
 # End server with KeyboardInterrupt
 def start_logger_server(host='localhost', port=5000):
     # Initialize logger with headers and filename
-    headers = ['time elapsed', 'steering angle', 'collision', 'lane breach']
+    headers = ['time elapsed', 'steering angle', 'collision', 'lane breach', 'lap count']
     csv_filename = 'log.csv'
 
     logger = setup_logger(csv_filename, headers)

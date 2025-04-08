@@ -48,6 +48,9 @@ except IndexError:
 
 sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
+from mpc_control import pursuitplusMPC #import other controller
+
+from cone import CONE
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -61,13 +64,13 @@ import argparse
 import collections
 import datetime
 import logging
-import socket
-import json
 import math
 import random
 import re
 import weakref
 import csv
+import socket
+import json
 
 if sys.version_info >= (3, 0):
 
@@ -158,7 +161,7 @@ class World(object):
         self._actor_filter = actor_filter
         self.restart()
         self.world.on_tick(hud.on_world_tick)
-        
+
     def restart(self):
         # Keep same camera config if the camera manager exists.
         cam_index = self.camera_manager.index if self.camera_manager is not None else 0
@@ -173,15 +176,24 @@ class World(object):
             blueprint.set_attribute('color', "196,30,58")
         # Spawn the player.
         if self.player is not None:
+            spawn_point = carla.Transform(Location(x=-49.1, y=-194.5, z=1), Rotation(yaw=0))
+            """
             spawn_point = self.player.get_transform()
             spawn_point.location.z += 2.0
             spawn_point.rotation.roll = 0.0
             spawn_point.rotation.pitch = 0.0
+            """
             self.destroy()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            
         while self.player is None:
+            """
             spawn_points = self.world.get_map().get_spawn_points()
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
+            self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            """
+            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=0.2), carla.Rotation(yaw=0))
+            blueprint_library = self.world.get_blueprint_library()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
@@ -261,7 +273,6 @@ class DualControl(object):
         self._reverse_idx = int(self._parser.get('G29 Racing Wheel', 'reverse'))
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
-
 
     # parse input
     def parse_events(self, world, clock):
@@ -525,8 +536,14 @@ class BlendedControl(DualControl):
 class Agent():
     def __init__(self):
         #self.speed_limit = 70
-        self.pp = PurePursuitPlusPID()
-        self.in_control = True #Comment to False if manual control also comment line 3 of act function
+        self.pp = PurePursuitPlusPID() #Uncomment for PID
+        #waypoints=self.createwaypointlist()
+        #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
+        self.in_control = False #Comment to False if manual control also comment line 3 of act function
+        self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
+        self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
+        self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
+        self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -543,7 +560,7 @@ class Agent():
         """
         #controls = self.invert_wheel(controls,world)
         #controls = self.speed_limiter(controls,world)
-        controls,self.in_control = self.pd_controller(controls,world)
+        #controls,self.in_control = self.pd_controller(controls,world)
         return controls
     
     def invert_wheel(self,controls,world):
@@ -587,12 +604,8 @@ class Agent():
             if len(wps) > 0:
                 waypoints.append(wps[0])
         if inclusive!=None:
-            waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/waypointIDS.csv')
-            waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointRoadIDS.csv')
-            waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/WaypointLaneIDs.csv')
-            waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/WaypointDistances.csv')
             for i in range(number+1):
-                if waypoints[i].id not in waypointids:
+                if waypoints[i].id not in self.waypointids:
                     waypoints[i]=1
             waypointsnew=[x for x in waypoints if x!=1]
             waypoints=waypointsnew
@@ -603,10 +616,10 @@ class Agent():
                     pass #Need to find new solution to this, this is the empty waypoint exception
                 for i in range(len(waypoints)-1,4):
                     try:
-                        wps=map.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                        wps=map.get_waypoint_xodr(self.waypointroadids[index+1],self.waypointlaneids[index+1],self.waypointdistances[index+1])
                     except(IndexError):
                         index=-1
-                        wps=map.get_waypoint_xodr(waypointroadids[index+1],waypointlaneids[index+1],waypointdistances[index+1])
+                        wps=map.get_waypoint_xodr(self.waypointroadids[index+1],self.waypointlaneids[index+1],self.waypointdistances[index+1])
                     index+=1
                     waypoints.append(wps)    
         #try:
@@ -665,7 +678,17 @@ class Agent():
             loc_2 = [carla_loc.x,carla_loc.y]
             locations[i,:] = np.array(loc_4)
         return locations
-            
+        
+    def createwaypointlist(self):
+        waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
+        waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
+        waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
+        waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
+        waypoints=[]
+        for i in range(len(waypointids)):
+            wps=map.get_waypoint_xodr(waypointroadids[i],waypointlaneids[i],waypointdistances[i])
+            waypoints.append(wps)
+        return waypoints
 
 
 
@@ -819,22 +842,25 @@ class HUD(object):
         # and autodrive warning
         speed_size = [200,100]
         speedometer = pygame.Surface(speed_size)
+        """
         if self.autodrive:
             speedometer.fill(pygame.color.Color(0,0,0))
         else:
             speedometer.fill(pygame.color.Color(200,0,0))
-        speedometer_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.70]
+        """
+        speedometer.fill(pygame.color.Color(0,128,0))
+        speedometer_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.75]
         display.blit(speedometer, speedometer_loc)
         speedometer_loc[0] += speed_size[0]//20
-        autodrive_output = ["Dis"," En"]
+        #autodrive_output = ["Dis"," En"] #commenting out autodrive piece
         speed = self._font_speed.render("     {:3.0f} MPH".format(self.speed_kmh/1.6), True, (255, 255, 255))
         display.blit(speed, speedometer_loc)
-        auto_drive = self._font_speed.render("AutoDrive {}abled".format(autodrive_output[self.autodrive]),True,(255,255,255))
+        #auto_drive = self._font_speed.render("AutoDrive {}abled".format(autodrive_output[self.autodrive]),True,(255,255,255)) #commenting out autodrice piece
         speedometer_loc[1] += speed_size[1]//2
-        display.blit(auto_drive,speedometer_loc)
+        #display.blit(auto_drive,speedometer_loc)
         ## END MAX_ADDED_BIT
         self._notifications.render(display)
-        self.help.render(display)
+        self.help.render(display) #uncomment for HUD
 
     def add_controller(self,controller):
         self.controller = controller
@@ -929,11 +955,12 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
-        
-        # log it
+        #log it
+        """
         logger = Logger()
         logger.log({'collision': 'yes'})
-
+        """
+        ###
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -967,10 +994,12 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-
-        # log it
+        #Log it
+        """
         logger = Logger()
         logger.log({'lane breach': 'yes'})
+        """
+        ##
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1106,7 +1135,121 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
+            
+   
+# ==============================================================================
+# -- ObstacleSpawning() ---------------------------------------------------------------
+# ==============================================================================
+class Obstacles():
+    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,obstacletypes,worldobject,worldcarla,simtime,agent):
+        """A function to intialize an Obstacles spawing object
+        
+        Given: 
+        waypointroadids: The string of the location of the csv file with waypoint roadids
+        waypointlaneids: The string of the location of the csv file with waypoint laneids
+        waypointdistances: The string of the location of the csv file with waypoint distances
+        worldobject: The world as the object class defined in this file
+        worldcarla: The carla world object
+        """
+        self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
+        self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
+        self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
+        self.obstacletypes = self.waypointfileProcessorString(obstacletypes)
+        self.worldobject=worldobject
+        self.worldcarla=worldcarla
+        self.lapcount=0
+        self.vehicle=self.worldobject.player
+        self.map=self.worldcarla.get_map()
+        self.simtime=simtime
+        self.agent=agent
+        self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
+        self.spawn_index = -5  
+        #self.reset(object_type, spawn_index)     
+        
+        
+    
+    def waypointfileProcessorint(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                column_data[i] = int(column_data[i][0])
+        return column_data
+        
+    def waypointfileProcessorString(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row[0].strip())
+        return column_data
+    
+    def waypointfileProcessorfloat(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
+        return column_data
+        
+    def reset(self,start_index):
+        for i in range(len(self.obstacletypes)):
+            actors = self.worldcarla.get_actors().filter(self.obstacletypes[i]) # this might need to be more specific
+            for actor in actors:
+                actor.destroy()
+        end_index = min(start_index + 5, len(self.waypointroadids))
+        for i in range(end_index-start_index):
+            object_type = self.obstacletypes[i]
+            CONE(self.worldcarla, [self.waypointroadids[start_index+i]], [self.waypointlaneids[start_index+i]], [self.waypointdistances[start_index+i]], object_type)
+        
+    def simulation_file(self):
+        #vehicle = self.world.get_actors().find('vehicle.*') # fix this, can't find vehicle
+        #vehicle = self.worldobject.player
+        #map = self.worldcarla.get_map()
+        #vehicle_spawn=map.get_waypoint_xodr(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
+        #vehicle_spawn = map.get_waypoint(vehicle.get_location(), project_to_road=True, lane_type=(carla.LaneType.Driving))
+        #spawn_index = self.waypointroadids.index(vehicle_spawn.road_id)
+        #self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+    
+        current_pos = self.vehicle.get_location()
+        if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
+            if self.lapcount<5:
+                self.lapcount += 1
+                print(self.lapcount)
+                '''
+                logger = Logger()
+                logger.log({
+                   'lap count': str(self.lapcount),
+                })
+                '''
+                self.spawn_index = (self.spawn_index + 5)
+                #self.reset(self.waypointroadids, self.waypointlaneids, self.waypointdistances, object_type, spawn_index)
+                self.reset(self.spawn_index)
+                self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
+            elif self.lapcount==5:
+                for i in range(len(self.obstacletypes)):
+                    actors = self.worldcarla.get_actors().filter(self.obstacletypes[i])
+                for actor in actors:
+                    actor.destroy()
+                
+    def timer(self,time):
+        if time-self.simtime>1:#Change to change the time between checks of being within the start zone
+            self.simtime=time
+            return True
+        else:
+            return False
+        
 
+# ==============================================================================
+# -- Logger() ---------------------------------------------------------------
+# ==============================================================================
 class Logger:
     _instance = None
 
@@ -1129,7 +1272,6 @@ class Logger:
 
     def stop(self):
         self._client_socket.close()
-
     
     '''
     Send data to log server
@@ -1144,7 +1286,7 @@ class Logger:
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
-# Main game function
+
 def game_loop(args):
     pygame.init()
     pygame.font.init()
@@ -1153,9 +1295,6 @@ def game_loop(args):
     try:
         logger = Logger()
         logger.start()
-        logger.log({'collision': 'yes'})
-        
-        # initialize carla and controllers
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1168,26 +1307,32 @@ def game_loop(args):
         agent = Agent()
         controller = BlendedControl(world,agent)
         hud.add_controller(controller)
-
+        obstacles=Obstacles('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsObjectType.csv',world,client.get_world(),hud.simulation_time,agent)
+        obstacles.simulation_file()
+        
         clock = pygame.time.Clock()
-
-        interval = 1000
-        elapsed = 0
-        # render loop
+        interval=1000
+        elapsed=0
+        timer=False
         while True:
-            dt = clock.tick_busy_loop(60)
+            clock.tick_busy_loop(60)
+            dt=clock.tick_busy_loop(60)
             if controller.parse_events(world, clock):
                 return
+            if obstacles.timer(hud.simulation_time):
+                obstacles.simulation_file()
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
-
-            elapsed += dt
-            if(elapsed > interval):
+            
+            elapsed+=dt
+            if (elapsed>interval):
+                """#Uncomment to test logger
                 logger.log({
-                    'steering angle': str(controller._control.steer),
-                })
-                elapsed = 0
+                   'steering angle': str(controller._control.steer),
+                   })
+                  """
+                elapsed=0
 
     finally:
 
