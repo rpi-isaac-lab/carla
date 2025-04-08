@@ -236,7 +236,12 @@ class World(object):
             for i in range(len(self.obstacletypes)):
                 actors= self.world.get_actors().filter(self.obstacletypes[i])
                 for actor in actors:
-                    actor.destroy()
+                    try:
+                        actor.destroy()
+                    except RuntimeError as e:
+                        print("Failed to destroy actor {actor.id}: {e}\n")
+
+
 
 # ==============================================================================
 # -- DualControl -----------------------------------------------------------
