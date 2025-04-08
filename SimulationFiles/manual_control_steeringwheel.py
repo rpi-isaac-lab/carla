@@ -594,9 +594,15 @@ class Agent():
         waypoints = [nwp]
         index=-1
         for i in range(number):
-            wps = nwp.next(((i+1)/number)*max_dist)
+            wps = nwp.next_until_lane_end(((i+1)/number)*max_dist)
             if len(wps) > 0:
                 waypoints.append(wps[0])
+        waypointsnew=copy.deepcopy(waypoints)
+        for i in range(number+1):
+            if waypoints[i].is_junction:
+                waypointsnew.pop(i)
+        waypoints=waypointsnew
+        """
         if inclusive!=None:
             waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
             waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
@@ -624,6 +630,7 @@ class Agent():
             #print(waypoints)
         #except(IndexError):
             #pass
+        """
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
