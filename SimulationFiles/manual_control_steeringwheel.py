@@ -605,8 +605,40 @@ class Agent():
             waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
             waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
             # fix this loop
-            ids = set(waypointids)
-            waypointsnew = [waypoint for waypoint in waypoints[:number+1] if waypoint.id in ids]
+            # ids = set(waypointids)
+            # waypointsnew = [waypoint for waypoint in waypoints[:number+1] if waypoint.id in ids]
+
+            # for quick look up of waypoint ids
+            wp_dict = {waypoint.id: waypoint for waypoint in waypoints}
+
+            # key: road ids, value: [(s, waypoint id)]
+            road_id_dict = dict()
+            for road_id, s, waypoint_id in zip(waypointroadids, waypointdistances, waypointids):
+                if road_id not in road_id_dict:
+                    road_id_dict[road_id] = []
+                road_id_dict[road_id].append((s, waypoint_id))
+            
+            # sorting by s value
+            for road_id in road_id_dict:
+                road_id_dict[road_id].sort()
+
+            waypointsnew = []
+            for road_id in waypointroadids:
+                if road_id in road_id_dict:
+                    for s, waypoint_id in road_id_dict[road_id]:
+                        if waypoint_id in wp_dict:
+                            waypointsnew.append(wp_dict[waypoint_id])
+                            if number is not None and len(waypointsnew) > number:
+                                break
+            
+            if number is not None:
+                waypointsnew = waypointsnew[:number+1]
+
+            # look through road id first
+            # link to list of all possible s
+            # connect s to waypoint id
+
+
             # for i in range(number+1):
             #     if waypoints[i].id not in waypointids:
             #         waypoints[i]=1
