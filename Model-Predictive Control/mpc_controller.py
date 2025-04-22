@@ -18,14 +18,14 @@ class state:
 
 
 class MPCController:
-    def __init__(self, waypoints, N=10, dt=0.1, x=0,y=0,th=0,v=0, L=3.0):
-        self.waypoints=waypoints
+    def __init__(self,N=10, dt=0.1, x=0,y=0,th=0,v=0, L=2.85):
+        #elf.waypoints=waypoints
         self.N = N          # Prediction horizon
         self.dt = dt        # Time step
         self.L = L          # Vehicle wheelbase
         self.max_acceleration = 1.0
-        self.xw=1
-        self.yw=1
+        self.xw=.5
+        self.yw=.5
         self.thetaw=0
         self.vw=0
         
@@ -34,11 +34,11 @@ class MPCController:
         self.history=[0,0]
     
     
-    def model(self, init_state, inputs):
-        x = init_state[0]
-        y = init_state[1]
-        theta = init_state[2]
-        v = init_state[3]
+    def model(self, state,inputs):
+        x = state[0]
+        y = state[1]
+        theta = state[2]
+        v = state[3]
         throttle,delta=inputs
         
         x_next = x + v * np.cos(theta) * self.dt
@@ -64,17 +64,18 @@ class MPCController:
         #print(cost)
         return cost
     
-    def optimize_controls(self,gstate):
+    def optimize_controls(self,gstate,ref_path):
+        """
         closest_idx = np.argmin(np.sum((self.waypoints - gstate[:2])**2, axis=1))
         ref_path = self.waypoints[closest_idx:closest_idx + self.N]
         if len(ref_path) < self.N:
             remaining = self.N - len(ref_path)
             wraparound = self.waypoints[:remaining]
             ref_path = np.vstack((ref_path, wraparound))
-
+        """
         u0 = np.zeros((self.N*2))  # Initial guess: [throttle, steering]
         throttle_bounds = [(0, 1) for _ in range(self.N)]
-        steering_bounds = [(-np.pi/4, np.pi/4) for _ in range(self.N)]
+        steering_bounds = [(-np.pi/12, np.pi/12) for _ in range(self.N)]
         bounds = throttle_bounds + steering_bounds
         result = minimize(
             self.cost_function,
@@ -97,4 +98,4 @@ class MPCController:
             print('error')
             self.errorcount=self.errorcount+1
             print(self.errorcount)
-            return np.array(self.history[-1])  # Fallback if optimization fails
+            return None#Fallback if optimization fails
