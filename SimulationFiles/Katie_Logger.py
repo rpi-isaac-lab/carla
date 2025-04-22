@@ -14,7 +14,7 @@ except IndexError:
     pass
 
 import carla
-
+import csv
 import argparse
 import random
 import time
@@ -24,32 +24,68 @@ import pygame
 class Waypoint_Finder(object):
 	# This class finds waypoint ids and state data
 	# for the driven vehicle
-	def __init__(self,world):
+	def __init__(self,world,waypointroadids,waypointlaneids,waypointdistances):
 		self.world = world
+		self.map=world.get_map()
 		self.simulation_time = 0
 		self._server_clock = pygame.time.Clock()
 		self.world.on_tick(self.on_tick)
+		self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
+		self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
+		self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
+		self.vehicle_spawn=self.map.get_waypoint_xodr(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
+		self.timing=0
+		self.lapcount=0
 
 	def on_tick(self,timestamp):
 		self._server_clock.tick()
 		self.server_fps = self._server_clock.get_fps()
 		self.frame = timestamp.frame
 		self.simulation_time = timestamp.elapsed_seconds
-
+		
+	def timer(self,time):
+            if time-self.timing>1:#Change to change the time between checks of being within the start zone
+                self.timing=time
+                return True
+            else:
+                return False
+		
+	def waypointfileProcessorfloat(self,csv_file):
+            column_data = []
+            with open(csv_file) as file:
+                reader = csv.reader(file)
+                next(reader, None)
+                for row in reader:
+                    column_data.append(row)
+                for i in range(len(column_data)):
+                    column_data[i] = float(column_data[i][0])
+            return column_data
+            
+	def waypointfileProcessorint(self,csv_file):
+            column_data = []
+            with open(csv_file) as file:
+                reader = csv.reader(file)
+                next(reader, None)
+                for row in reader:
+                    column_data.append(row)
+                for i in range(len(column_data)):
+                    column_data[i] = int(column_data[i][0])
+            return column_data
+            
 	def log_waypoints(self,filename,refresh_rate=60):
 		# Refresh rate in Hz
 		try:
 			f = open(filename,"w+")
-			f.write("time,Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity\n")
+			f.write("time,Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, Lap Count\n")
 			actor_list = self.world.get_actors()
 			# Find the driver car
 			for id in actor_list:
 		            try:
-			        if id.attributes["role_name"] == "hero":
-			            vehicle = id
-			            break
-			    except:
-			        continue
+		                if id.attributes["role_name"] == "hero":
+		                    vehicle = id
+		                    break
+		            except:
+		                continue
 			if vehicle is None:
 				return 1
 			last_time = 0
@@ -58,9 +94,13 @@ class Waypoint_Finder(object):
 				if curr_time-last_time >= 1/refresh_rate:
 					last_time = curr_time
 					t = vehicle.get_transform()
-					print(t)
 					v=vehicle.get_velocity()
-					f.write("{},{},{},{},{},{},{},{},{},{},{}\n".format(self.simulation_time,vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z))
+					if self.timer(curr_time):
+					    current_pos = vehicle.get_location()
+					    if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
+					        self.lapcount += 1
+					        self.timing+=30
+					f.write("{},{},{},{},{},{},{},{},{},{},{},{},\n".format(self.simulation_time,vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,self.lapcount))
 		except KeyboardInterrupt:
 			f.close()
 		return 0
@@ -131,5 +171,5 @@ if __name__ == "__main__":
 	client.set_timeout(2.0)
 	filename = "KatieLogTest.csv"
 	#follow_waypoints(client,filename)
-	WP = Waypoint_Finder(client.get_world())
+	WP = Waypoint_Finder(client.get_world(),'/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
 	WP.log_waypoints(filename)
