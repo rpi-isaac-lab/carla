@@ -543,6 +543,11 @@ class Agent():
         self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
         self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
         self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
+        self.junctionwaypointsids=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/JunctionwaypointsIDs.csv')
+        self.junctionroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/JunctionwaypointsRoadIDs.csv')
+        self.junctionlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/JunctionwaypointsLaneIDs.csv')
+        self.junctiondistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/JunctionwaypointsS.csv')
+        self.junctionids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/JunctionwaypointsJuctID.csv')
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -590,6 +595,52 @@ class Agent():
             controls.steer = steer
             return controls, True
         return controls, False
+    def _retrieve_options(list_waypoints, current_waypoint):
+        """
+        Compute the type of connection between the current active waypoint and the multiple waypoints present in
+        list_waypoints. The result is encoded as a list of RoadOption enums.
+
+        :param list_waypoints: list with the possible target waypoints in case of multiple options
+        :param current_waypoint: current active waypoint
+        :return: list of RoadOption enums representing the type of connection from the active waypoint to each
+             candidate in list_waypoints
+        """
+        options = []
+        for next_waypoint in list_waypoints:
+            # this is needed because something we are linking to
+            # the beggining of an intersection, therefore the
+            # variation in angle is small
+            next_next_waypoint = next_waypoint.next(3.0)[0]
+            link = _compute_connection(current_waypoint, next_next_waypoint)
+            options.append(link)
+
+        return options
+
+
+    def _compute_connection(current_waypoint, next_waypoint, threshold=35):
+        """
+        Compute the type of topological connection between an active waypoint (current_waypoint) and a target waypoint (next_waypoint).
+
+        :param current_waypoint: active waypoint
+        :param next_waypoint: target waypoint
+        :return: the type of topological connection encoded as a RoadOption enum:
+             RoadOption.STRAIGHT
+             RoadOption.LEFT
+             RoadOption.RIGHT
+        """
+        n = next_waypoint.transform.rotation.yaw
+        n = n % 360.0
+
+        c = current_waypoint.transform.rotation.yaw
+        c = c % 360.0
+
+        diff_angle = (n - c) % 180.0
+        if diff_angle < threshold or diff_angle > (180 - threshold):
+            return STRAIGHT
+        elif diff_angle > 90.0:
+            return LEFT
+        else:
+            return RIGHT
 
     
     def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
@@ -600,13 +651,42 @@ class Agent():
         waypoints = [nwp]
         index=-1
         for i in range(number):
-            wps = nwp.next_until_lane_end(((i+1)/number)*max_dist)
-            if len(wps) > 0:
+            wps = nwp.next(((i+1)/number)*max_dist)
+            if len(wps) == 1:
                 waypoints.append(wps[0])
+            elif len(wps)>1:
+                road_options_list = _retrieve_options(
+                    wps, waypoints[-1])
+                try:
+                    next_waypoint = next_waypoints[road_options_list.index(STRAIGHT)]
+                    waypoints.append(next_waypoint)
+        """
+        waypointsnew=[]
+        ids=set(self.junctionwaypointsids)
         for i in range(number+1):
             if waypoints[i].is_junction:
-                waypoints[i]=1
-        waypoints=list(filter(lambda a: a!=1,waypoints))
+               if waypoints[i].id in ids:
+                   waypointsnew.append(waypoints[i])
+            else:
+                waypointsnew.append(waypoints[i])
+        waypoints=waypointsnew
+        if len(waypoints)<4:
+            try:
+                index=self.junctionwaypointsids.index(waypoints[-1].id)
+            except(ValueError):
+                pass #Need to find new solution to this, this is the empty waypoint exception
+            except(IndexError):
+                pass
+            for i in range(len(waypoints)-1,4):
+                try:
+                    wps=map.get_waypoint_xodr(self.junctionroadids[index+1],self.junctionlaneids[index+1],self.junctiondistances[index+1])
+                except(IndexError):
+                    index=-1
+                    wps=map.get_waypoint_xodr(self.junctionroadids[index+1],self.junctionlaneids[index+1],self.junctiondistances[index+1])
+                index+=1
+                waypoints.append(wps) 
+        """     
+        #waypoints=list(filter(lambda a: a!=1,waypoints))
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
