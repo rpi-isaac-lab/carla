@@ -160,6 +160,7 @@ class World(object):
         self._actor_filter = actor_filter
         self.restart()
         self.world.on_tick(hud.on_world_tick)
+        self.make_nice_weather()
 
     def restart(self):
         # Keep same camera config if the camera manager exists.
@@ -211,6 +212,19 @@ class World(object):
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
 
+    def make_nice_weather(self):
+        #Insert Maxes Nice Weather Code
+        weather = self.world.get_weather()
+        weather.sun_azimuth_angle = 0
+        weather.sun_altitude_angle = 60
+        weather.cloudiness = 0
+        weather.precipitation = 0
+        weather.precipitation_deposits = 0
+        weather.wind_intensity =0
+        weather.fog_density = 0
+        weather.wetness = 0
+        self.world.set_weather(weather)
+        
     def tick(self, clock):
         self.hud.tick(self, clock)
 
@@ -595,97 +609,42 @@ class Agent():
             controls.steer = steer
             return controls, True
         return controls, False
-    def _retrieve_options(list_waypoints, current_waypoint):
-        """
-        Compute the type of connection between the current active waypoint and the multiple waypoints present in
-        list_waypoints. The result is encoded as a list of RoadOption enums.
-
-        :param list_waypoints: list with the possible target waypoints in case of multiple options
-        :param current_waypoint: current active waypoint
-        :return: list of RoadOption enums representing the type of connection from the active waypoint to each
-             candidate in list_waypoints
-        """
-        options = []
-        for next_waypoint in list_waypoints:
-            # this is needed because something we are linking to
-            # the beggining of an intersection, therefore the
-            # variation in angle is small
-            next_next_waypoint = next_waypoint.next(3.0)[0]
-            link = _compute_connection(current_waypoint, next_next_waypoint)
-            options.append(link)
-
-        return options
-
-
-    def _compute_connection(current_waypoint, next_waypoint, threshold=35):
-        """
-        Compute the type of topological connection between an active waypoint (current_waypoint) and a target waypoint (next_waypoint).
-
-        :param current_waypoint: active waypoint
-        :param next_waypoint: target waypoint
-        :return: the type of topological connection encoded as a RoadOption enum:
-             RoadOption.STRAIGHT
-             RoadOption.LEFT
-             RoadOption.RIGHT
-        """
-        n = next_waypoint.transform.rotation.yaw
-        n = n % 360.0
-
-        c = current_waypoint.transform.rotation.yaw
-        c = c % 360.0
-
-        diff_angle = (n - c) % 180.0
-        if diff_angle < threshold or diff_angle > (180 - threshold):
-            return STRAIGHT
-        elif diff_angle > 90.0:
-            return LEFT
-        else:
-            return RIGHT
-
-    
-    def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
+   
+    def find_waypoints(self,vehicle,map,number=200,max_dist=10,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
         # If inclusive is not None, waypoints must be in list inclusive
-        #This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
         waypoints = [nwp]
         index=-1
         for i in range(number):
             wps = nwp.next(((i+1)/number)*max_dist)
-            if len(wps) == 1:
-                waypoints.append(wps[0])
-            elif len(wps)>1:
-                road_options_list = _retrieve_options(
-                    wps, waypoints[-1])
-                try:
-                    next_waypoint = next_waypoints[road_options_list.index(STRAIGHT)]
-                    waypoints.append(next_waypoint)
-        """
-        waypointsnew=[]
-        ids=set(self.junctionwaypointsids)
-        for i in range(number+1):
-            if waypoints[i].is_junction:
-               if waypoints[i].id in ids:
-                   waypointsnew.append(waypoints[i])
-            else:
-                waypointsnew.append(waypoints[i])
-        waypoints=waypointsnew
-        if len(waypoints)<4:
-            try:
-                index=self.junctionwaypointsids.index(waypoints[-1].id)
-            except(ValueError):
-                pass #Need to find new solution to this, this is the empty waypoint exception
-            except(IndexError):
-                pass
-            for i in range(len(waypoints)-1,4):
-                try:
-                    wps=map.get_waypoint_xodr(self.junctionroadids[index+1],self.junctionlaneids[index+1],self.junctiondistances[index+1])
-                except(IndexError):
-                    index=-1
-                    wps=map.get_waypoint_xodr(self.junctionroadids[index+1],self.junctionlaneids[index+1],self.junctiondistances[index+1])
-                index+=1
-                waypoints.append(wps) 
-        """     
+            if len(wps) > 0:
+                if wps[0].is_junction:
+                    if wps[0].junction_id==498: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==499 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                            elif wps[i].road_id==551 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==874 and wps[i].lane_id==3:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==271 and wps[i].lane_id==-1:
+                                waypoints.append(wps[i])
+                                break
+                    else:
+                        for i in range(len(wps)):
+                            if str(wps[i].lane_change)=='Left':
+                                waypoints.append(wps[i])
+                                break
+                else:
+                    waypoints.append(wps[0])
         #waypoints=list(filter(lambda a: a!=1,waypoints))
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
@@ -994,6 +953,7 @@ class CollisionSensor(object):
         self.hud = hud
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.collision')
+        bp.set_attribute('role_name', 'collisionsensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.
@@ -1036,6 +996,7 @@ class LaneInvasionSensor(object):
         self.hud = hud
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.lane_invasion')
+        bp.set_attribute('role_name', 'lanesensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.

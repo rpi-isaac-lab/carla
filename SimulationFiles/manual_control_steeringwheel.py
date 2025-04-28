@@ -159,6 +159,7 @@ class World(object):
         self._actor_filter = actor_filter
         self.restart()
         self.world.on_tick(hud.on_world_tick)
+        self.make_nice_weather()
 
     def restart(self):
         # Keep same camera config if the camera manager exists.
@@ -216,7 +217,20 @@ class World(object):
     def render(self, display):
         self.camera_manager.render(display)
         self.hud.render(display)
-
+        
+    def make_nice_weather(self):
+        #Insert Maxes Nice Weather Code
+        weather = self.world.get_weather()
+        weather.sun_azimuth_angle = 0
+        weather.sun_altitude_angle = 60
+        weather.cloudiness = 0
+        weather.precipitation = 0
+        weather.precipitation_deposits = 0
+        weather.wind_intensity =0
+        weather.fog_density = 0
+        weather.wetness = 0
+        self.world.set_weather(weather)
+  
     def destroy(self):
         sensors = [
             self.camera_manager.sensor,
@@ -537,7 +551,7 @@ class Agent():
         self.pp = PurePursuitPlusPID() #Uncomment for PID
         #waypoints=self.createwaypointlist()
         #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
-        self.in_control = False #Comment to False if manual control also comment line 3 of act function
+        self.in_control = True #Comment to False if manual control also comment line 3 of act function
         self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
         self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
         self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
@@ -558,7 +572,7 @@ class Agent():
         """
         #controls = self.invert_wheel(controls,world)
         #controls = self.speed_limiter(controls,world)
-        #controls,self.in_control = self.pd_controller(controls,world)
+        controls,self.in_control = self.pd_controller(controls,world)
         return controls
     
     def invert_wheel(self,controls,world):
@@ -598,13 +612,34 @@ class Agent():
         waypoints = [nwp]
         index=-1
         for i in range(number):
-            wps = nwp.next_until_lane_end(((i+1)/number)*max_dist)
+            wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
-                waypoints.append(wps[0])
-        for i in range(number+1):
-            if waypoints[i].is_junction:
-                waypoints[i]=1
-        waypoints=list(filter(lambda a: a!=1,waypoints))
+                if wps[0].is_junction:
+                    if wps[0].junction_id==498: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==499 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                            elif wps[i].road_id==551 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==874 and wps[i].lane_id==3:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==271 and wps[i].lane_id==-1:
+                                waypoints.append(wps[i])
+                                break
+                    else:
+                        for i in range(len(wps)):
+                            if str(wps[i].lane_change)=='Left':
+                                waypoints.append(wps[i])
+                                break
+                else:
+                    waypoints.append(wps[0])
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -915,6 +950,7 @@ class CollisionSensor(object):
         self.hud = hud
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.collision')
+        bp.set_attribute('role_name', 'collisionsensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.
@@ -957,6 +993,7 @@ class LaneInvasionSensor(object):
         self.hud = hud
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.lane_invasion')
+        bp.set_attribute('role_name', 'lanesensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.
@@ -1243,7 +1280,6 @@ def game_loop(args):
         hud.add_controller(controller)
         lap=Lapping('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',world,client.get_world(),hud.simulation_time,agent)
         lap.simulation_file()
-
         clock = pygame.time.Clock()
         interval=1000
         elapsed=0

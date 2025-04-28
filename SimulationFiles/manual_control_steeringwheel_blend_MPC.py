@@ -160,6 +160,7 @@ class World(object):
         self._actor_filter = actor_filter
         self.restart()
         self.world.on_tick(hud.on_world_tick)
+        self.make_nice_weather()
 
     def restart(self):
         # Keep same camera config if the camera manager exists.
@@ -217,7 +218,20 @@ class World(object):
     def render(self, display):
         self.camera_manager.render(display)
         self.hud.render(display)
-
+    
+    def make_nice_weather(self):
+        #Insert Maxes Nice Weather Code
+        weather = self.world.get_weather()
+        weather.sun_azimuth_angle = 0
+        weather.sun_altitude_angle = 60
+        weather.cloudiness = 0
+        weather.precipitation = 0
+        weather.precipitation_deposits = 0
+        weather.wind_intensity =0
+        weather.fog_density = 0
+        weather.wetness = 0
+        self.world.set_weather(weather)
+        
     def destroy(self):
         sensors = [
             self.camera_manager.sensor,
@@ -936,6 +950,7 @@ class CollisionSensor(object):
         self.hud = hud
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.collision')
+        bp.set_attribute('role_name', 'collisionsensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.
@@ -1010,6 +1025,7 @@ class GnssSensor(object):
         self.lon = 0.0
         world = self._parent.get_world()
         bp = world.get_blueprint_library().find('sensor.other.gnss')
+        bp.set_attribute('role_name', 'lanesensor')
         self.sensor = world.spawn_actor(bp, carla.Transform(carla.Location(x=1.0, z=2.8)), attach_to=self._parent)
         # We need to pass the lambda a weak reference to self to avoid circular
         # reference.
