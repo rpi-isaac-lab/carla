@@ -627,30 +627,32 @@ class Agent():
         for i in range(number):
             wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
-                waypoints.append(wps[0])
-        if inclusive!=None:
-            for i in range(number+1):
-                if waypoints[i].id not in self.waypointids:
-                    waypoints[i]=1
-            waypointsnew=[x for x in waypoints if x!=1]
-            waypoints=waypointsnew
-            if len(waypoints)<4:
-                try:
-                    index=waypointids.index(waypoints[-1].id)
-                except(IndexError):
-                    pass #Need to find new solution to this, this is the empty waypoint exception
-                for i in range(len(waypoints)-1,4):
-                    try:
-                        wps=map.get_waypoint_xodr(self.waypointroadids[index+1],self.waypointlaneids[index+1],self.waypointdistances[index+1])
-                    except(IndexError):
-                        index=-1
-                        wps=map.get_waypoint_xodr(self.waypointroadids[index+1],self.waypointlaneids[index+1],self.waypointdistances[index+1])
-                    index+=1
-                    waypoints.append(wps)    
-        #try:
-            #print(waypoints)
-        #except(IndexError):
-            #pass
+                if wps[0].is_junction:
+                    if wps[0].junction_id==498: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==499 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                            elif wps[i].road_id==551 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==874 and wps[i].lane_id==3:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==271 and wps[i].lane_id==-1:
+                                waypoints.append(wps[i])
+                                break
+                    else:
+                        for i in range(len(wps)):
+                            if str(wps[i].lane_change)=='Left':
+                                waypoints.append(wps[i])
+                                break
+                else:
+                    waypoints.append(wps[0])
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -981,10 +983,6 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
-        #log it
-        logger = Logger()
-        logger.log({'collision': 'yes'})
-        ###
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -1019,10 +1017,6 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-        #Log it
-        logger = Logger()
-        logger.log({'lane breach': 'yes'})
-        ##
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1245,8 +1239,6 @@ class Obstacles():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print(self.lapcount)
-            logger=Logger()
-            logger.log({'lap count': str(self.lapcount),})
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
             if self.lapcount<5:
                 self.spawn_index = (self.spawn_index + 5)
@@ -1273,36 +1265,6 @@ class Obstacles():
             actor.destroy()
     
         
-
-# ==============================================================================
-# -- Logger() ---------------------------------------------------------------
-# ==============================================================================
-'''
-Send data to log server
-Data must be a dictionary with headers specified
-
-    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
-'''
-def send_log_message(data, host='localhost', port=5000):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.connect((host, port))
-        client_socket.sendall(json.dumps(data).encode('utf-8'))
-
-class Logger:
-    _instance = None
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._start_time = None
-        return cls._instance
-    
-    def start(self):
-        self._start_time = time.time()
-        
-    def log(self, data):
-        elapsed = time.time() - self._start_time
-        data['time elapsed'] = elapsed
-        send_log_message(data)
 # ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
@@ -1314,8 +1276,6 @@ def game_loop(args):
     world = None
 
     try:
-        logger = Logger()
-        logger.start()
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1406,11 +1366,6 @@ def main():
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
-
-    log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
-
-    logging.info('listening to server %s:%s', args.host, args.port)
 
     print(__doc__)
 

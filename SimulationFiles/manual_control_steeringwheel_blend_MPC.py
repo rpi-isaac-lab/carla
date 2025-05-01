@@ -560,7 +560,7 @@ class Agent():
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
-        self.throttle_gain = .5
+        self.throttle_gain = 4.5
         self.brake_gain = 1
         return
     
@@ -626,23 +626,42 @@ class Agent():
         return controls, False
 
     
-    def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
+    def find_waypoints(self,vehicle,map,number=200,max_dist=10,inclusive=None):
         # Find (number) waypoints from the vehicle forward along the map
         # If inclusive is not None, waypoints must be in list inclusive
-        #This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
         waypoints = [nwp]
         index=-1
         for i in range(number):
             wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
-                waypoints.append(wps[0])
-        """
-        for i in range(number+1):
-            if waypoints[i].is_junction:
-                waypoints[i]=1
-        """
-        waypoints=list(filter(lambda a: a!=1,waypoints))
+                if wps[0].is_junction:
+                    if wps[0].junction_id==498: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==499 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                            elif wps[i].road_id==551 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==874 and wps[i].lane_id==3:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==271 and wps[i].lane_id==-1:
+                                waypoints.append(wps[i])
+                                break
+                    else:
+                        for i in range(len(wps)):
+                            if str(wps[i].lane_change)=='Left':
+                                waypoints.append(wps[i])
+                                break
+                else:
+                    waypoints.append(wps[0])
+        #waypoints=list(filter(lambda a: a!=1,waypoints))
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
         waypoints = self.waypoints2locations(waypoints)
@@ -663,6 +682,66 @@ class Agent():
         #print("="*40)
         #print(body_waypoints)
         return body_waypoints
+        
+        """
+        for i in range(number+1):
+            if waypoints[i].is_junction:
+                waypoints[i]=1
+        """
+        """
+        for i in range(number):
+            wps = nwp.next(((i+1)/number)*max_dist)
+            if len(wps) > 0:
+                if wps[0].is_junction:
+                    if wps[0].junction_id==498: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==499 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                            elif wps[i].road_id==551 and wps[i].lane_id==1:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==874 and wps[i].lane_id==3:
+                                waypoints.append(wps[i])
+                                break
+                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
+                        for i in range(len(wps)):
+                            if wps[i].road_id==271 and wps[i].lane_id==-1:
+                                waypoints.append(wps[i])
+                                break
+                    else:
+                        for i in range(len(wps)):
+                            if str(wps[i].lane_change)=='Left':
+                                waypoints.append(wps[i])
+                                break
+                else:
+                    waypoints.append(wps[0])
+        
+        #waypoints=list(filter(lambda a: a!=1,waypoints))
+        # Get vehicle matrix
+        mat = np.array(vehicle.get_transform().get_inverse_matrix())
+        waypoints = self.waypoints2locations(waypoints)
+        #print("="*40)
+        #print("="*40)
+        #print(waypoints)
+        #print("="*40)
+        #print(mat)
+        body_waypoints = np.zeros(shape=(len(waypoints),2))
+        # Turn into 2d coords in car frame
+        for i in range(len(waypoints)):
+            waypoints[i] = mat@waypoints[i]
+            temp = waypoints[i]/waypoints[i,3]
+            body_waypoints[i] = temp[:2]
+        #print("="*40)
+        #print(waypoints)
+        #print("="*40)
+        #print("="*40)
+        #print(body_waypoints)
+        return body_waypoints
+        """
+        
      
     def waypointfileProcessorint(self,csv_file):
         column_data = []
@@ -970,10 +1049,6 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
-        #log it
-        logger = Logger()
-        logger.log({'collision': 'yes'})
-        ###
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -1007,10 +1082,6 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-        #Log it
-        logger = Logger()
-        logger.log({'lane breach': 'yes'})
-        ##
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1212,8 +1283,6 @@ class Lapping():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print(self.lapcount)
-            logger=Logger()
-            logger.log({'lap count': str(self.lapcount),})
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
             
                 
@@ -1225,35 +1294,6 @@ class Lapping():
             return False
             
 # ==============================================================================
-# -- Logger() ---------------------------------------------------------------
-# ==============================================================================
-'''
-Send data to log server
-Data must be a dictionary with headers specified
-
-    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
-'''
-def send_log_message(data, host='localhost', port=5000):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.connect((host, port))
-        client_socket.sendall(json.dumps(data).encode('utf-8'))
-
-class Logger:
-    _instance = None
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._start_time = None
-        return cls._instance
-    
-    def start(self):
-        self._start_time = time.time()
-        
-    def log(self, data):
-        elapsed = time.time() - self._start_time
-        data['time elapsed'] = elapsed
-        send_log_message(data)
-# ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
@@ -1264,8 +1304,6 @@ def game_loop(args):
     world = None
 
     try:
-        logger = Logger()
-        logger.start()
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1343,10 +1381,6 @@ def main():
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
 
-    log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
-
-    logging.info('listening to server %s:%s', args.host, args.port)
 
     print(__doc__)
 

@@ -973,10 +973,6 @@ class CollisionSensor(object):
             return
         actor_type = get_actor_display_name(event.other_actor)
         self.hud.notification('Collision with %r' % actor_type)
-        #log it
-        logger = Logger()
-        logger.log({'collision': 'yes'})
-        ###
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
         self.history.append((event.frame, intensity))
@@ -1011,10 +1007,6 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
-        #Log it
-        logger = Logger()
-        logger.log({'lane breach': 'yes'})
-        ##
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -1215,8 +1207,6 @@ class Lapping():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print(self.lapcount)
-            logger=Logger()
-            logger.log({'lap count': str(self.lapcount),})
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
             
                 
@@ -1227,36 +1217,7 @@ class Lapping():
         else:
             return False
             
-# ==============================================================================
-# -- Logger() ---------------------------------------------------------------
-# ==============================================================================
-'''
-Send data to log server
-Data must be a dictionary with headers specified
-
-    send_log_message({"time elapsed": "0.01", "steering angle": "100"})
-'''
-def send_log_message(data, host='localhost', port=5000):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.connect((host, port))
-        client_socket.sendall(json.dumps(data).encode('utf-8'))
-
-class Logger:
-    _instance = None
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._start_time = None
-        return cls._instance
-    
-    def start(self):
-        self._start_time = time.time()
-        
-    def log(self, data):
-        elapsed = time.time() - self._start_time
-        data['time elapsed'] = elapsed
-        send_log_message(data)
-# ==============================================================================
+#=================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
@@ -1267,8 +1228,6 @@ def game_loop(args):
     world = None
 
     try:
-        logger = Logger()
-        logger.start()
         client = carla.Client(args.host, args.port)
         client.set_timeout(2.0)
 
@@ -1346,10 +1305,6 @@ def main():
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
 
-    log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
-
-    logging.info('listening to server %s:%s', args.host, args.port)
 
     print(__doc__)
 
