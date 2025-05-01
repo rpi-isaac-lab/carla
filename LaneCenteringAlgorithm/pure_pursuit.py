@@ -11,12 +11,12 @@ More info here: https://thomasfermi.github.io/Algorithms-for-Automated-Driving/C
 Originial Code from here: https://github.com/thomasfermi/Algorithms-for-Automated-Driving/blob/master/code/solutions/control/pure_pursuit.py
 """
 import numpy as np
-from .get_target_point import get_target_point
+from get_target_point import get_target_point
 
 # TODO: Tune parameters of PID with these global variables
-param_Kp = 2
+param_Kp = 4
 param_Ki = 0
-param_Kd = 0
+param_Kd = 4
 # TODO: Tune parameters of Pure Pursuit with these global variables
 param_K_dd = 0.4
 # The above parameters will be used in the Carla simulation
@@ -34,11 +34,11 @@ class PurePursuit:
         # transform x coordinates of waypoints such that coordinate origin is in rear wheel
         waypoints[:,0] += self.waypoint_shift
         # 3 is the minimum look ahead distance, 20 is the max lookahead distance
-        look_ahead_distance = np.clip(self.K_dd * speed, 3,20)
+        look_ahead_distance = np.clip(self.K_dd * speed, 5,20)
 
         track_point = get_target_point(look_ahead_distance, waypoints)
         if track_point is None:
-            return 0
+            return None, None
 
         alpha = np.arctan2(track_point[1], track_point[0])
 
@@ -47,7 +47,7 @@ class PurePursuit:
 
         # undo transform to waypoints 
         waypoints[:,0] -= self.waypoint_shift
-        return steer
+        return steer, alpha
 
 
 class PIDController:
@@ -74,8 +74,12 @@ class PurePursuitPlusPID:
         self.pure_pursuit = pure_pursuit
         self.pid = pid
 
-    def get_control(self,waypoints, speed, desired_speed, dt):
-        self.pid.set_point = desired_speed
+    def get_control(self,waypoints, speed, desired_speed, dt, cornering_mult=1):
+        steer, alpha = self.pure_pursuit.get_control(waypoints, speed)
+        #print(alpha)
+        if alpha is None:
+            self.pid.set_point = desired_speed
+        else:
+            self.pid.set_point = max(desired_speed*(1/(1+cornering_mult*abs(alpha))),5)
         a = self.pid.get_control(speed,dt)
-        steer = self.pure_pursuit.get_control(waypoints, speed)
-        return a, steer add comment
+        return a, steer

@@ -57,7 +57,7 @@ def get_target_point(lookahead, polyline):
     Parameters
     ----------
     lookahead : float
-        The target point is on a circle of radius lookahead
+        The target point is on a circle of radius `lookahead`
         The circle's center is (0,0)
     poyline: array_like, shape (M,2)
         A list of 2d points that defines a polyline.
@@ -65,7 +65,7 @@ def get_target_point(lookahead, polyline):
     Returns:
     --------
     target_point: numpy array, shape (,2)
-        Point with positive x-coordinate where the circle of radius lookahead
+        Point with positive x-coordinate where the circle of radius `lookahead`
         and the polyline intersect. 
         Return None if there is no such point.  
         If there are multiple such points, return the one that the polyline
