@@ -611,6 +611,7 @@ class Agent():
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
         waypoints = [nwp]
         index=-1
+        temp_var = False
         for i in range(number):
             wps = nwp.next(((i+1)/number)*max_dist)
             if len(wps) > 0:
@@ -624,6 +625,8 @@ class Agent():
                                 waypoints.append(wps[i])
                                 break
                     elif wps[0].junction_id==861: #Hardcoding a troublemaker
+                        # print("flag")
+                        temp_var = True
                         for i in range(len(wps)):
                             if wps[i].road_id==874 and wps[i].lane_id==3:
                                 waypoints.append(wps[i])
@@ -658,7 +661,8 @@ class Agent():
         #print(waypoints)
         #print("="*40)
         #print("="*40)
-        #print(body_waypoints)
+        # if temp_var:
+        #     print(body_waypoints)
         return body_waypoints
     
     def waypointfileProcessorint(self,csv_file):
@@ -703,6 +707,8 @@ class Agent():
             wps=map.get_waypoint_xodr(waypointroadids[i],waypointlaneids[i],waypointdistances[i])
             waypoints.append(wps)
         return waypoints
+    
+    
 
 
 

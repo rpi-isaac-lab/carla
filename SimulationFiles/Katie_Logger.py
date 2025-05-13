@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import faulthandler; faulthandler.enable()
 
 import glob
 import os
@@ -17,9 +17,14 @@ import carla
 import csv
 import argparse
 import random
+import numpy
 import time
 import pygame
+import math
 
+def get_actor_display_name(actor, truncate=250):
+    name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
+    return (name[:truncate - 1] + u'\u2026') if len(name) > truncate else name
 
 class Waypoint_Finder(object):
 	# This class finds waypoint ids and state data
@@ -37,6 +42,11 @@ class Waypoint_Finder(object):
 		self.timing=0
 		self.lapcount=0
 
+		self.collision = None
+		self.laneinvade = None
+
+		
+
 	def on_tick(self,timestamp):
 		self._server_clock.tick()
 		self.server_fps = self._server_clock.get_fps()
@@ -44,63 +54,104 @@ class Waypoint_Finder(object):
 		self.simulation_time = timestamp.elapsed_seconds
 		
 	def timer(self,time):
-            if time-self.timing>1:#Change to change the time between checks of being within the start zone
-                self.timing=time
-                return True
-            else:
-                return False
+		if time-self.timing>1:#Change to change the time between checks of being within the start zone
+			self.timing=time
+			
+			return True
+		else:
+			return False
 		
 	def waypointfileProcessorfloat(self,csv_file):
-            column_data = []
-            with open(csv_file) as file:
-                reader = csv.reader(file)
-                next(reader, None)
-                for row in reader:
-                    column_data.append(row)
-                for i in range(len(column_data)):
-                    column_data[i] = float(column_data[i][0])
-            return column_data
+		column_data = []
+		with open(csv_file) as file:
+			reader = csv.reader(file)
+			next(reader, None)
+			for row in reader:
+				column_data.append(row)
+			for i in range(len(column_data)):
+				column_data[i] = float(column_data[i][0])
+		return column_data
             
 	def waypointfileProcessorint(self,csv_file):
-            column_data = []
-            with open(csv_file) as file:
-                reader = csv.reader(file)
-                next(reader, None)
-                for row in reader:
-                    column_data.append(row)
-                for i in range(len(column_data)):
-                    column_data[i] = int(column_data[i][0])
-            return column_data
+		column_data = []
+		with open(csv_file) as file:
+			reader = csv.reader(file)
+			next(reader, None)
+			for row in reader:
+				column_data.append(row)
+			for i in range(len(column_data)):
+				column_data[i] = int(column_data[i][0])
+		return column_data
+	
+	def _on_collision(self,event):
+		actor_type = get_actor_display_name(event.other_actor)
+		self.collision = actor_type
+		return actor_type
+	
+	def _on_invasion(self,event):
+		lane_types = set(x.type for x in event.crossed_lane_markings)
+		text = ['%r' % str(x).split()[-1] for x in lane_types]
+		self.laneinvade = text
+
+		return text
             
-	def log_waypoints(self,filename,refresh_rate=60):
-		# Refresh rate in Hz
+	def log_waypoints(self,filename,refresh_rate=60):# Refresh rate in Hz
 		try:
 			f = open(filename,"w+")
-			f.write("time,Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, Lap Count\n")
+			f.write("time,Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
 			actor_list = self.world.get_actors()
 			# Find the driver car
 			for id in actor_list:
-		            try:
-		                if id.attributes["role_name"] == "hero":
-		                    vehicle = id
-		                    break
-		            except:
-		                continue
-			if vehicle is None:
+				try:
+					if id.attributes["role_name"] == "hero":
+						vehicle = id
+					elif id.attributes["role_name"] == "collisionsensor":
+						collisionsensor = id
+					elif id.attributes["role_name"] == "lanesensor":
+						lanesensor = id
+					else:
+						continue
+				except:
+					continue
+			if vehicle is None and collisionsensor is None and lanesensor is None:
 				return 1
 			last_time = 0
+			Collision=collisionsensor.listen(lambda event: self._on_collision(event))
 			while True:
 				curr_time = time.time()
 				if curr_time-last_time >= 1/refresh_rate:
 					last_time = curr_time
 					t = vehicle.get_transform()
 					v=vehicle.get_velocity()
+					nwp = self.map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving))
+					wloc=nwp.transform #Get waypoint 3D location
+					latdistance= math.sqrt((t.location.x-wloc.location.x)**2+(t.location.y-wloc.location.y)**2)
 					if self.timer(curr_time):
-					    current_pos = vehicle.get_location()
-					    if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
-					        self.lapcount += 1
-					        self.timing+=30
-					f.write("{},{},{},{},{},{},{},{},{},{},{},{},\n".format(self.simulation_time,vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,self.lapcount))
+						current_pos = vehicle.get_location()
+						if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
+							self.lapcount += 1
+							self.timing+=30
+						Laneinvade=lanesensor.listen(lambda event: self._on_invasion(event))
+					
+					# This recipe shows the current traffic rules affecting the vehicle. 
+					# Shows the current lane type and if a lane change can be done in the actual lane or the surrounding ones.
+
+					# ...
+					waypoint27 = self.world.get_map().get_waypoint(vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+					if ((waypoint27.lane_change==1 or waypoint27.lane_change ==3) and waypoint27.right_lane_marking.type == 1):
+						print("Move Over")
+						print(waypoint27.lane_change,waypoint27.right_lane_marking.type)
+					# Left and Right lane markings
+
+					
+
+	
+					f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(self.simulation_time,vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
+					if self.laneinvade != None:
+						self.laneinvade = None
+					if self.collision != None:
+						self.collision = None
+					
 		except KeyboardInterrupt:
 			f.close()
 		return 0
