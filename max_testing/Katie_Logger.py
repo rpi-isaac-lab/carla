@@ -127,7 +127,13 @@ class Waypoint_Finder(object):
 	def log_waypoints(self,filename,refresh_rate=60):# Refresh rate in Hz
 		try:
 			f = open(filename,"w+")
-			f.write("time,Steering Angle,User Steering Angle,Controler Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, X Center Ahead, Y Center Ahead, Z Center Ahead, X Shoulder Ahead, Y Shoulder Ahead, Z Shoulder Ahead, Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
+			f.write("time,")
+			f.write("Steering Angle,User Steering Angle,Controler Steering Angle,")
+			f.write("X Position,Y Position,Z Position, Pitch, Roll, Yaw,")
+			f.write("X velocity, Y velocity, Z velocity,")
+			f.write("X Center Ahead, Y Center Ahead, Z Center Ahead,")
+			f.write("X Shoulder Ahead, Y Shoulder Ahead, Z Shoulder Ahead,")
+			f.write("Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
 			actor_list = self.world.get_actors()
 			# Find the driver car
 			for id in actor_list:
@@ -201,12 +207,12 @@ class Waypoint_Finder(object):
 
 					# f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(self.simulation_time,vehicle.get_control().steer,user_steer,auto_steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
 	
-					f.write("{}".format(self.simulation_time))
-					f.write("{},{},{}".format(vehicle.get_control().steer,user_steer,auto_steer))
-					f.write("{},{},{},{},{},{}".format(t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw))
-					f.write("{},{},{}".format(v.x,v.y,v.z))
-					f.write("{},{},{}".format(center_ahead_x,center_ahead_y,center_ahead_z))
-					f.write("{},{},{}".format(shoulder_ahead_x,shoulder_ahead_y,shoulder_ahead_z))
+					f.write("{},".format(self.simulation_time))
+					f.write("{},{},{},".format(vehicle.get_control().steer,user_steer,auto_steer))
+					f.write("{},{},{},{},{},{},".format(t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw))
+					f.write("{},{},{},".format(v.x,v.y,v.z))
+					f.write("{},{},{},".format(center_ahead_x,center_ahead_y,center_ahead_z))
+					f.write("{},{},{},".format(shoulder_ahead_x,shoulder_ahead_y,shoulder_ahead_z))
 					f.write("{},{},{},{}\n".format(latdistance,self.lapcount,self.laneinvade,self.collision))
 					# f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(time.time(),vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
 					if self.laneinvade != None:
