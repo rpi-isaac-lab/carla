@@ -48,7 +48,6 @@ except IndexError:
 
 sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
-from mpc_control import pursuitplusMPC #import other controller
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------

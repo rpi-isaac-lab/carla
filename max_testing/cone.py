@@ -28,54 +28,32 @@ import csv
 
 import argparse
 import random
+import numpy as np
 
 
-
-def CONE(world, waypointroadids,waypointlaneids,waypointdistances,obstacletype):
+def CONE(world, obstacletype):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
     """
-
+    waypointroadids=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv',int,skiprows=1)
+    waypointlaneids=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv',int,skiprows=1)
+    waypointdistances=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',float,skiprows=1)
+    
     map = world.get_map()
     cone_library = world.get_blueprint_library()
     cone = cone_library.find(obstacletype)
 
-
-
     for i in range(len(waypointroadids)):
         waypoint = map.get_waypoint_xodr(waypointroadids[i], waypointlaneids[i], waypointdistances[i])
         if waypoint:
-            if not i in [1,3,8, 9,10,12,13,18,23,26]:
+            if not i in [1,3,8, 9,10,12,13,15,18,23,26]:
                 spawn = waypoint.transform
-                print(spawn)
+                # print(spawn)
                 this_cone = world.spawn_actor(cone,spawn)
                 this_cone.set_enable_gravity(True) #Turn this back on
                 this_cone.set_simulate_physics(True)
     return
-
-def waypointfileProcessorint(csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader, None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i] = int(column_data[i][0])
-        return column_data
-       
-def waypointfileProcessorfloat(csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=float(column_data[i][0])
-        return column_data
-        
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
@@ -113,10 +91,7 @@ if __name__ == "__main__":
     client.set_timeout(2.0)
     world = client.get_world()
 
-    waypointroadids=waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv')
-    waypointlaneids=waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv')
-    waypointdistances=waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
     
     
-    CONE(world,waypointroadids,waypointlaneids,waypointdistances,"static.prop.trafficcone01")
+    CONE(world,"static.prop.trafficcone01")
     

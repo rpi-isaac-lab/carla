@@ -18,9 +18,22 @@ import csv
 import argparse
 import random
 import numpy
+import numpy as np
 import time
 import pygame
 import math
+
+if sys.version_info >= (3, 0):
+
+    from configparser import ConfigParser
+
+else:
+
+    from ConfigParser import RawConfigParser as ConfigParser
+
+from pure_pursuit import PurePursuit,PurePursuitPlusPID
+
+
 
 def get_actor_display_name(actor, truncate=250):
     name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
@@ -42,8 +55,27 @@ class Waypoint_Finder(object):
 		self.timing=0
 		self.lapcount=0
 
+		self.pd_prev_time = time.time()
+		self.pp = PurePursuitPlusPID() #Uncomment for PID
+		self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
+		self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
+		self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
+		self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
+		self.desired_speed = 20 # meters/second
+		self.cornering_speed_mult = 5
+	
 		self.collision = None
 		self.laneinvade = None
+		pygame.joystick.init()
+		self._joystick = pygame.joystick.Joystick(0)
+		self._joystick.init()
+
+		self._parser = ConfigParser()
+		self._parser.read('wheel_config.ini')
+		self._steer_idx = int(self._parser.get('G29 Racing Wheel', 'steering_wheel'))
+
+		numAxes = self._joystick.get_numaxes()
+		self.jsInputs = [float(self._joystick.get_axis(i)) for i in range(numAxes)]
 
 		
 
@@ -123,6 +155,10 @@ class Waypoint_Finder(object):
 					last_time = curr_time
 					t = vehicle.get_transform()
 					v=vehicle.get_velocity()
+
+					user_steer = self.joystick_control()
+					auto_steer = self.pd_controller()
+
 					nwp = self.map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving))
 					wloc=nwp.transform #Get waypoint 3D location
 					latdistance= math.sqrt((t.location.x-wloc.location.x)**2+(t.location.y-wloc.location.y)**2)
@@ -156,6 +192,101 @@ class Waypoint_Finder(object):
 		except KeyboardInterrupt:
 			f.close()
 		return 0
+	
+	def pd_controller(self):
+		
+		v = self.world.player.get_velocity()
+		map = self.world.world.get_map()
+		speed_mps = (math.sqrt(v.x**2 + v.y**2 + v.z**2)) # Vehicle speed meters/sec
+		current_time = time.time()
+		delta_t = current_time-self.pd_prev_time
+		waypoints = self.find_waypoints(self.world.player,map,inclusive=10)
+		a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,cornering_mult=self.cornering_speed_mult)
+		# update the prev_time
+		self.pd_prev_time = current_time
+		
+		return steer
+	
+	def joystick_control(self):
+		K1 = 1.0  # 0.55
+		deadzone = .05 # .035
+		base_steering = self.jsInputs[self._steer_idx]
+		if abs(base_steering) < deadzone:
+			steerCmd = 440.4*base_steering**3
+		else:
+			steerCmd = K1 * math.tan(1.1 * base_steering)
+		return steerCmd
+	
+	
+	def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
+		# Find (number) waypoints from the vehicle forward along the map
+		# If inclusive is not None, waypoints must be in list inclusive
+		#This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
+		nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
+		waypoints = [nwp]
+		index=-1
+		temp_var = False
+		for i in range(number):
+			wps = nwp.next(((i+1)/number)*max_dist)
+			if len(wps) > 0:
+				if wps[0].is_junction:
+					if wps[0].junction_id==498: #Hardcoding a troublemaker
+						for i in range(len(wps)):
+							if wps[i].road_id==499 and wps[i].lane_id==1:
+								waypoints.append(wps[i])
+								break
+							elif wps[i].road_id==551 and wps[i].lane_id==1:
+								waypoints.append(wps[i])
+								break
+					elif wps[0].junction_id==861: #Hardcoding a troublemaker
+						# print("flag")
+						temp_var = True
+						for i in range(len(wps)):
+							if wps[i].road_id==874 and wps[i].lane_id==3:
+								waypoints.append(wps[i])
+								break
+					elif wps[0].junction_id==238: #Hardcoding a troublemaker
+						for i in range(len(wps)):
+							if wps[i].road_id==271 and wps[i].lane_id==-1:
+								waypoints.append(wps[i])
+								break
+					else:
+						for i in range(len(wps)):
+							if str(wps[i].lane_change)=='Left':
+								waypoints.append(wps[i])
+								break
+				else:
+					waypoints.append(wps[0])
+		# Get vehicle matrix
+		mat = np.array(vehicle.get_transform().get_inverse_matrix())
+		waypoints = self.waypoints2locations(waypoints)
+		#print("="*40)
+		#print("="*40)
+		#print(waypoints)
+		#print("="*40)
+		#print(mat)
+		body_waypoints = np.zeros(shape=(len(waypoints),2))
+		# Turn into 2d coords in car frame
+		for i in range(len(waypoints)):
+			waypoints[i] = mat@waypoints[i]
+			temp = waypoints[i]/waypoints[i,3]
+			body_waypoints[i] = temp[:2]
+		#print("="*40)
+		#print(waypoints)
+		#print("="*40)
+		#print("="*40)
+		# if temp_var:
+		#     print(body_waypoints)
+		return body_waypoints
+	
+	def waypoints2locations(self,waypoints):
+		locations = np.zeros(shape=(len(waypoints),4))
+		for i in range(len(waypoints)):
+			carla_loc = waypoints[i].transform.location
+			loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
+			locations[i,:] = np.array(loc_4)
+		return locations
+
 
 
 ################################################################################
