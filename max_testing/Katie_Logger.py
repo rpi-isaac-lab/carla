@@ -58,9 +58,6 @@ class Waypoint_Finder(object):
 		self.pd_prev_time = time.time()
 		self.pp = PurePursuitPlusPID() #Uncomment for PID
 		self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv')
-		self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv')
-		self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv')
-		self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
 		self.desired_speed = 20 # meters/second
 		self.cornering_speed_mult = 5
 	
@@ -130,7 +127,7 @@ class Waypoint_Finder(object):
 	def log_waypoints(self,filename,refresh_rate=60):# Refresh rate in Hz
 		try:
 			f = open(filename,"w+")
-			f.write("time,Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
+			f.write("time,Steering Angle,User Steering Angle,Controler Steering Angle,X Position,Y Position,Z Position, Pitch, Roll, Yaw, X velocity, Y velocity, Z velocity, X Center Ahead, Y Center Ahead, Z Center Ahead, X Shoulder Ahead, Y Shoulder Ahead, Z Shoulder Ahead, Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
 			actor_list = self.world.get_actors()
 			# Find the driver car
 			for id in actor_list:
@@ -173,7 +170,28 @@ class Waypoint_Finder(object):
 					# # Shows the current lane type and if a lane change can be done in the actual lane or the surrounding ones.
 
 					# # ...
-					waypoint27 = self.world.get_map().get_waypoint(vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+					
+					try:
+						waypoint27 = self.world.get_map().get_waypoint(vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving))
+						center_ahead = waypoint27.next(6.3)[0].transform.location
+						center_ahead_x = center_ahead.x
+						center_ahead_y = center_ahead.y
+						center_ahead_z = center_ahead.z
+					except:
+						center_ahead_x = None
+						center_ahead_y = None
+						center_ahead_z = None
+					try:
+						waypoint27 = self.world.get_map().get_waypoint(vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Shoulder))
+						shoulder_ahead = waypoint27.next(20)[0].transform.location
+						shoulder_ahead_x = shoulder_ahead.x
+						shoulder_ahead_y = shoulder_ahead.y
+						shoulder_ahead_z = shoulder_ahead.z
+					except:
+						shoulder_ahead_x = None
+						shoulder_ahead_y = None
+						shoulder_ahead_z = None
+
 					# if ((waypoint27.lane_change==1 or waypoint27.lane_change ==3) and waypoint27.right_lane_marking.type == 1):
 					# 	print("Move Over")
 					# 	print(waypoint27.lane_change,waypoint27.right_lane_marking.type)
@@ -181,8 +199,15 @@ class Waypoint_Finder(object):
 
 					
 
+					# f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(self.simulation_time,vehicle.get_control().steer,user_steer,auto_steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
 	
-					f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(self.simulation_time,vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
+					f.write("{}".format(self.simulation_time))
+					f.write("{},{},{}".format(vehicle.get_control().steer,user_steer,auto_steer))
+					f.write("{},{},{},{},{},{}".format(t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw))
+					f.write("{},{},{}".format(v.x,v.y,v.z))
+					f.write("{},{},{}".format(center_ahead_x,center_ahead_y,center_ahead_z))
+					f.write("{},{},{}".format(shoulder_ahead_x,shoulder_ahead_y,shoulder_ahead_z))
+					f.write("{},{},{},{}\n".format(latdistance,self.lapcount,self.laneinvade,self.collision))
 					# f.write("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(time.time(),vehicle.get_control().steer,t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw,v.x,v.y,v.z,latdistance,self.lapcount,self.laneinvade,self.collision))
 					if self.laneinvade != None:
 						self.laneinvade = None
