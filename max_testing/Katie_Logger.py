@@ -383,8 +383,27 @@ if __name__ == "__main__":
   
 	client = carla.Client(args.host, args.port)
 	client.set_timeout(2.0)
-	filename = "KatieLogTest.csv"
-	filename = "TheaLog100.csv"
+	
+	#Input Participant Number in terminal
+	name = str(input("Enter your participant number:"))
+	
+	#load data array of all participant numbers and assosciated run counts
+	#Currently only one run counter, different types could be different arrays or different enteries
+	participant_run_logger = np.loadtxt('participant_run_logger.csv',str)
+
+	if name in participant_run_logger:
+		run_number = participant_run_logger[np.where(name==participant_run_logger)[0][0]][1]
+		participant_run_logger[np.where(name==participant_run_logger)[0][0]][1] = str(int(participant_run_logger[np.where(name==participant_run_logger)[0][0]][1])+1)
+	else:
+		participant_run_logger = np.vstack((participant_run_logger,np.array((name,1))))
+		run_number = 1
+
+	np.savetxt('participant_run_logger.csv',participant_run_logger)
+
+	#Filename in format P{participant number}R{run_number}Log.csv
+	filename = "P"+name+"R"+run_number+"Log.csv"
+	# filename = "KatieLogTest.csv"
+	# filename = "TheaLog100.csv"
 	#follow_waypoints(client,filename)
 	WP = Waypoint_Finder(client.get_world(),'/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
 	WP.log_waypoints(filename)
