@@ -6,12 +6,15 @@ import os
 import sys
 
 try:
-	sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
-		sys.version_info.major,
-		sys.version_info.minor,
-		'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(glob.glob('%s/../carla/dist/carla-*%d.%d-%s.egg' % (
+        this_dir,
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
 except IndexError:
     pass
+
 
 import carla
 import csv
@@ -52,6 +55,8 @@ class Waypoint_Finder(object):
 		self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
 		self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
 		self.vehicle_spawn=self.map.get_waypoint_xodr(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
+		print(self.vehicle_spawn)
+		print(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
 		self.timing=0
 		self.lapcount=0
 
@@ -134,20 +139,26 @@ class Waypoint_Finder(object):
 			f.write("X Center Ahead, Y Center Ahead, Z Center Ahead,")
 			f.write("X Shoulder Ahead, Y Shoulder Ahead, Z Shoulder Ahead,")
 			f.write("Lateral Position,Lap Count, Lane Invasion, Collision Sensor\n")
-			actor_list = self.world.get_actors()
+			
 			# Find the driver car
-			for id in actor_list:
-				try:
-					if id.attributes["role_name"] == "hero":
-						vehicle = id
-					elif id.attributes["role_name"] == "collisionsensor":
-						collisionsensor = id
-					elif id.attributes["role_name"] == "lanesensor":
-						lanesensor = id
-					else:
+			vehicle = None
+			collisionsensor = None
+			lanesensor = None
+			while vehicle == None or collisionsensor == None or lanesensor== None:
+				actor_list = self.world.get_actors()
+				for id in actor_list:
+					try:
+						if id.attributes["role_name"] == "hero":
+							vehicle = id
+							self.vehicle = id
+						elif id.attributes["role_name"] == "collisionsensor":
+							collisionsensor = id
+						elif id.attributes["role_name"] == "lanesensor":
+							lanesensor = id
+						else:
+							continue
+					except:
 						continue
-				except:
-					continue
 			if vehicle is None and collisionsensor is None and lanesensor is None:
 				return 1
 			last_time = 0
@@ -226,12 +237,12 @@ class Waypoint_Finder(object):
 	
 	def pd_controller(self):
 		
-		v = self.world.player.get_velocity()
-		map = self.world.world.get_map()
+		v = self.vehicle.get_velocity()
+		map = self.world.get_map()
 		speed_mps = (math.sqrt(v.x**2 + v.y**2 + v.z**2)) # Vehicle speed meters/sec
 		current_time = time.time()
 		delta_t = current_time-self.pd_prev_time
-		waypoints = self.find_waypoints(self.world.player,map,inclusive=10)
+		waypoints = self.find_waypoints(self.vehicle,map,inclusive=10)
 		a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,cornering_mult=self.cornering_speed_mult)
 		# update the prev_time
 		self.pd_prev_time = current_time
@@ -385,12 +396,15 @@ if __name__ == "__main__":
 	client.set_timeout(2.0)
 	
 	#Input Participant Number in terminal
-	name = str(input("Enter your participant number:"))
+	# name = int(input("Enter your participant number:"))
+	name = 1
 	
 	#load data array of all participant numbers and assosciated run counts
 	#Currently only one run counter, different types could be different arrays or different enteries
-	participant_run_logger = np.loadtxt('participant_run_logger.csv',str)
-
+	np.savetxt('participant_run_logger.csv',np.array(((1,3),(2,3),(3,3))))
+	participant_run_logger = (np.loadtxt('participant_run_logger.csv'))
+	print(participant_run_logger,name)
+	print(np.where(participant_run_logger==name))
 	if name in participant_run_logger:
 		run_number = participant_run_logger[np.where(name==participant_run_logger)[0][0]][1]
 		participant_run_logger[np.where(name==participant_run_logger)[0][0]][1] = str(int(participant_run_logger[np.where(name==participant_run_logger)[0][0]][1])+1)
@@ -401,9 +415,9 @@ if __name__ == "__main__":
 	np.savetxt('participant_run_logger.csv',participant_run_logger)
 
 	#Filename in format P{participant number}R{run_number}Log.csv
-	filename = "P"+name+"R"+run_number+"Log.csv"
+	filename = "P"+str(name)+"R"+str(run_number)+"Log.csv"
 	# filename = "KatieLogTest.csv"
 	# filename = "TheaLog100.csv"
 	#follow_waypoints(client,filename)
-	WP = Waypoint_Finder(client.get_world(),'/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv')
+	WP = Waypoint_Finder(client.get_world(),'/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv')
 	WP.log_waypoints(filename)

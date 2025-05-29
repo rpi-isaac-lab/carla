@@ -48,6 +48,7 @@ except IndexError:
 
 sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
+from mpc_control import pursuitplusMPC #import other controller
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -120,6 +121,7 @@ except ImportError:
 
 # Not pretty, but functional
 import test_ff
+from cone3 import CONE
 
 
 # ==============================================================================
@@ -169,6 +171,7 @@ class World(object):
         #blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
         # Get a Lincoln Mkz 2020
         blueprint = self.world.get_blueprint_library().find("vehicle.lincoln.mkz_2020")
+        # blueprint = self.world.get_blueprint_library().find("vehicle.gazelle.omafiets")
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
@@ -232,6 +235,7 @@ class World(object):
         weather.fog_density = 0
         weather.wetness = 0
         self.world.set_weather(weather)
+
   
     def destroy(self):
         sensors = [
@@ -287,10 +291,20 @@ class DualControl(object):
         self._reverse_idx = int(self._parser.get('G29 Racing Wheel', 'reverse'))
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
+        
+        # actor_list = world.get_actors()
+        # for id in actor_list:
+        #     try:
+        #         if id.attributes["role_name"] == "hero":
+        #             self.vehicle_id = id
+        #     except:
+        #         continue
+
 
     # parse input
     def parse_events(self, world, clock):
         for event in pygame.event.get():
+            
             if event.type == pygame.QUIT:
                 return True
 
@@ -312,6 +326,7 @@ class DualControl(object):
             
             # keyboard input
             elif event.type == pygame.KEYUP:
+                
                 if self._is_quit_shortcut(event.key):
                     return True
                 elif event.key == K_BACKSPACE:
@@ -477,7 +492,6 @@ class BlendedControl(DualControl):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return True
-
             # controller input
             elif event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 0:
@@ -496,8 +510,12 @@ class BlendedControl(DualControl):
             
             # keyboard input
             elif event.type == pygame.KEYUP:
+                # print(event)
                 if self._is_quit_shortcut(event.key):
                     return True
+                elif event.key == 1073741913:
+                    spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=1), carla.Rotation(yaw=0))
+                    self.vehicle_id.set_location(spawn_point)
                 elif event.key == K_BACKSPACE:
                     print("Line 495")
                     world.restart()
@@ -545,7 +563,7 @@ class BlendedControl(DualControl):
                 # This is where you would add the call to the Agent
                 agent_control = carla.VehicleControl()
                 agent_control = self._agent.act(agent_control,world)
-                self.blend_controls(agent_control, 1)
+                self.blend_controls(agent_control, 0) #0 for manual control
 
                 self._control.reverse = self._control.gear < 0
             elif isinstance(self._control, carla.WalkerControl):
@@ -576,6 +594,9 @@ class Agent():
         self.prev_time = time.time()
         self.throttle_gain = 1
         self.brake_gain = 1
+        self.prev_road_id = 2
+
+        self.road_waypoint_array = np.loadtxt("Road_Start_and_ends.txt",delimiter=" ", dtype=int)
         return
     
     def act(self,controls,world):
@@ -631,40 +652,112 @@ class Agent():
         waypoints = [nwp]
         index=-1
         temp_var = False
-        for i in range(number):
-            wps = nwp.next(((i+1)/number)*max_dist)
-            if len(wps) > 0:
-                if wps[0].is_junction:
-                    if wps[0].junction_id==498: #Hardcoding a troublemaker
-                        for i in range(len(wps)):
-                            if wps[i].road_id==499 and wps[i].lane_id==1:
-                                waypoints.append(wps[i])
-                                break
-                            elif wps[i].road_id==551 and wps[i].lane_id==1:
-                                waypoints.append(wps[i])
-                                break
-                    elif wps[0].junction_id==861: #Hardcoding a troublemaker
-                        # print("flag")
-                        temp_var = True
-                        for i in range(len(wps)):
-                            if wps[i].road_id==874 and wps[i].lane_id==3:
-                                waypoints.append(wps[i])
-                                break
-                    elif wps[0].junction_id==238: #Hardcoding a troublemaker
-                        for i in range(len(wps)):
-                            if wps[i].road_id==271 and wps[i].lane_id==-1:
-                                waypoints.append(wps[i])
-                                break
-                    else:
-                        for i in range(len(wps)):
-                            if str(wps[i].lane_change)=='Left':
-                                waypoints.append(wps[i])
-                                break
+        locations = np.zeros(shape=(number,4))
+        locations[:,3] = 1
+        if nwp.is_junction:
+            if self.prev_road_id in [4,3,2,1]:
+                next_road = self.prev_road_id -1
+                prev_road_loc_index = 1
+                next_road_loc_index = 4
+            elif self.prev_road_id in [65,66,67,68]:
+                next_road = self.prev_road_id +1
+                prev_road_loc_index = 4
+                next_road_loc_index = 1
+            elif self.prev_road_id == 0:
+                next_road = 65
+                prev_road_loc_index = 1
+                next_road_loc_index = 1
+            elif self.prev_road_id == 69:
+                next_road = 4
+                next_road_loc_index = 4
+                prev_road_loc_index = 4
+            else:
+                print("Logic Error line 659")
+            next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
+            prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
+            locations[:,0]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index],self.road_waypoint_array[next_road_index,next_road_loc_index],number)+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
+
+            locations[:,1]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+1],self.road_waypoint_array[next_road_index,next_road_loc_index+1],number)+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
+            locations[:,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number)+nwp.transform.location.z
+        else:
+            if nwp.road_id in [0,1,2,3,4,65,66,67,68,69] and self.prev_road_id != nwp.road_id:
+                self.prev_road_id = nwp.road_id
+
+            wps = nwp.next_until_lane_end(max_dist/number)
+            
+            if len(wps) < number:
+                for i in range(len(wps)):
+                    waypoint_next = wps[i]
+                    carla_loc = waypoint_next.transform.location
+                    loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
+                    locations[i,:] = np.array(loc_4)
+                if self.prev_road_id in [4,3,2,1]:
+                    next_road = self.prev_road_id -1
+                    prev_road_loc_index = 1
+                    next_road_loc_index = 4
+                elif self.prev_road_id in [65,66,67,68]:
+                    next_road = self.prev_road_id +1
+                    prev_road_loc_index = 4
+                    next_road_loc_index = 1
+                elif self.prev_road_id == 0:
+                    next_road = 65
+                    prev_road_loc_index = 1
+                    next_road_loc_index = 1
+                elif self.prev_road_id == 69:
+                    next_road = 4
+                    next_road_loc_index = 4
+                    prev_road_loc_index = 4
                 else:
-                    waypoints.append(wps[0])
+                    print("Logic Error line 659")
+                next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
+                prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
+                locations[len(wps):,0]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index],self.road_waypoint_array[next_road_index,next_road_loc_index],number-len(wps))+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
+
+                locations[len(wps):,1]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+1],self.road_waypoint_array[next_road_index,next_road_loc_index+1],number-len(wps))+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
+                locations[len(wps):,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number-len(wps))+nwp.transform.location.z
+            else:
+                for i in range(number):
+                    waypoint_next = wps[i]
+                    carla_loc = waypoint_next.transform.location
+                    loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
+                    locations[i,:] = np.array(loc_4)
+        
+        # for i in range(number):
+        #     wps = nwp.next(((i+1)/number)*max_dist)
+        #     if len(wps) > 0:
+        #         if wps[0].is_junction:
+        #             if wps[0].junction_id==498: #Hardcoding a troublemaker
+        #                 for i in range(len(wps)):
+        #                     if wps[i].road_id==499 and wps[i].lane_id==1:
+        #                         waypoints.append(wps[i])
+        #                         break
+        #                     elif wps[i].road_id==551 and wps[i].lane_id==1:
+        #                         waypoints.append(wps[i])
+        #                         break
+        #             elif wps[0].junction_id==861: #Hardcoding a troublemaker
+        #                 # print("flag")
+        #                 temp_var = True
+        #                 for i in range(len(wps)):
+        #                     if wps[i].road_id==874 and wps[i].lane_id==3:
+        #                         waypoints.append(wps[i])
+        #                         break
+        #             elif wps[0].junction_id==238: #Hardcoding a troublemaker
+        #                 for i in range(len(wps)):
+        #                     if wps[i].road_id==271 and wps[i].lane_id==-1:
+        #                         waypoints.append(wps[i])
+        #                         break
+        #             else:
+        #                 for i in range(len(wps)):
+        #                     if str(wps[i].lane_change)=='Left':
+        #                         waypoints.append(wps[i])
+        #                         break
+        #         else:
+        #             waypoints.append(wps[0])
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
-        waypoints = self.waypoints2locations(waypoints)
+        # print(mat)
+        # waypoints = self.waypoints2locations(wps)
+        waypoints = locations
         #print("="*40)
         #print("="*40)
         #print(waypoints)
@@ -681,7 +774,7 @@ class Agent():
         #print("="*40)
         #print("="*40)
         # if temp_var:
-        #     print(body_waypoints)
+        # print(body_waypoints)
         return body_waypoints
     
     def waypointfileProcessorint(self,csv_file):
@@ -1187,6 +1280,8 @@ class Lapping():
         self.simtime=simtime
         self.agent=agent
         self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
+        # print(self.vehicle_spawn)
+        # print(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
         self.spawn_index = -5  
         #self.reset(object_type, spawn_index)     
         
@@ -1229,6 +1324,9 @@ class Lapping():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print(self.lapcount)
+            if self.lapcount == 1:
+                CONE(self.worldcarla,"static.prop.trafficcone01")
+
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
             
                 
