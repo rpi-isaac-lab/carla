@@ -18,12 +18,15 @@ import os
 import sys
 
 try:
-    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(glob.glob('%s/../carla/dist/carla-*%d.%d-%s.egg' % (
+        this_dir,
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
 except IndexError:
     pass
+
 
 import carla
 
