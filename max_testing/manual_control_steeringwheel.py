@@ -1323,8 +1323,8 @@ class Lapping():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print(self.lapcount)
-            if self.lapcount == 1:
-                CONE(self.worldcarla,"static.prop.trafficcone01")
+            
+            CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
 
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
             

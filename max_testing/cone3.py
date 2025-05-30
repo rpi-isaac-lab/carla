@@ -31,7 +31,7 @@ import random
 import numpy as np
 
 
-def CONE(world, obstacletype, loop_count = 0):
+def CONE(world, obstacletype, loop_count = 1):
     """
         Cone cone cone cone cone cone cone... 
         Cone cone. Cone cone cone cone cone.
@@ -39,7 +39,8 @@ def CONE(world, obstacletype, loop_count = 0):
     waypointroadids=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv',int,skiprows=1)
     waypointlaneids=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv',int,skiprows=1)
     waypointdistances=np.loadtxt('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',float,skiprows=1)
-    
+    blocked_points_index = [[4, 19, 17, 11], [2, 20, 0, 5], [24, 22, 14, 6], [7, 16, 25, 21]]
+    blocked_points = blocked_points_index[int(loop_count-1)%4]
     map = world.get_map()
 
     actor_list = world.get_actors()
@@ -61,7 +62,7 @@ def CONE(world, obstacletype, loop_count = 0):
     for i in range(len(waypointroadids)):
         waypoint = map.get_waypoint_xodr(int(waypointroadids[i]), int(waypointlaneids[i]), float(waypointdistances[i]))
         if waypoint:
-            if not i in [1,3,8, 9,10,12,13,15,18,23,26]:
+            if i in blocked_points:
                 spawn = waypoint.transform
                 # print(spawn)
                 this_cone = world.spawn_actor(cone,spawn)

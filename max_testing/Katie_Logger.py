@@ -388,6 +388,16 @@ if __name__ == "__main__":
 		default=2000,
 		type=int,
 		help='TCP port to listen to (default: 2000)')
+	argparser.add_argument(
+		'-t', '--trial',
+		default=0,
+		type=int,
+		help='Trial Type')
+	argparser.add_argument(
+		'-d', '--id',
+		default=0,
+		type=int,
+		help='Participent ID')
 	args = argparser.parse_args()
   
 	client = carla.Client(args.host, args.port)
@@ -395,25 +405,25 @@ if __name__ == "__main__":
 	
 	#Input Participant Number in terminal
 	# name = int(input("Enter your participant number:"))
-	name = 1
+	
 	
 	#load data array of all participant numbers and assosciated run counts
 	#Currently only one run counter, different types could be different arrays or different enteries
-	np.savetxt('participant_run_logger.csv',np.array(((1,3),(2,3),(3,3))))
-	participant_run_logger = (np.loadtxt('participant_run_logger.csv'))
-	print(participant_run_logger,name)
-	print(np.where(participant_run_logger==name))
-	if name in participant_run_logger:
-		run_number = participant_run_logger[np.where(name==participant_run_logger)[0][0]][1]
-		participant_run_logger[np.where(name==participant_run_logger)[0][0]][1] = str(int(participant_run_logger[np.where(name==participant_run_logger)[0][0]][1])+1)
-	else:
-		participant_run_logger = np.vstack((participant_run_logger,np.array((name,1))))
-		run_number = 1
+	
+	i = 1
+	while True:
+		filename = "ParticipantData/"+"T"+str(args.trial)+"/"+"P"+str(args.id)+"R" + str(i)+"Log.csv"
+		try:
+			f = open(filename,"r")
+			f.close()
+			i += 1
+		except:
+			break
 
-	np.savetxt('participant_run_logger.csv',participant_run_logger)
+	
 
 	#Filename in format P{participant number}R{run_number}Log.csv
-	filename = "P"+str(name)+"R"+str(run_number)+"Log.csv"
+	filename = "ParticipantData/"+"T"+str(args.trial)+"/"+"P"+str(args.id)+"R" + str(i)+"Log.csv"
 	# filename = "KatieLogTest.csv"
 	# filename = "TheaLog100.csv"
 	#follow_waypoints(client,filename)
