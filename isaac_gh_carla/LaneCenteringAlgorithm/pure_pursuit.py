@@ -118,8 +118,10 @@ class PurePursuit:
         self.lanesensor = None
         self.laneinvade = False
         self.blocked_points = CONE(self.world)
+        self.blocked_points_index = [[4, 19, 17, 11], [2, 20, 0, 5], [24, 22, 14, 6], [7, 16, 25, 21]]
         f = open("TheaLogger.csv","w+")
         f.close()
+        
         self.start_time = time.time()
     
     def _on_invasion(self,event):
@@ -127,7 +129,7 @@ class PurePursuit:
         self.laneinvade = True
         return
     
-    def get_control(self, waypoints, speed):
+    def get_control(self, waypoints, speed,obj):
         # transform x coordinates of waypoints such that coordinate origin is in rear wheel
         waypoints[:,0] += self.waypoint_shift
         if self.vehicle == None or self.lanesensor == None:
@@ -137,6 +139,7 @@ class PurePursuit:
                 try:
                     if id.attributes["role_name"] == "hero":
                         self.vehicle = id
+                        self.lappin=Lapping('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',self.vehicle)
                     elif id.attributes["role_name"] == "lanesensor":
                         self.lanesensor = id
                     else:
@@ -145,8 +148,9 @@ class PurePursuit:
                     continue
         Laneinvade=self.lanesensor.listen(lambda event: self._on_invasion(event))
         self.look_ahead_distance = np.clip(self.K_dd * speed, 5,20)
-        
-        self.lane_shift = self.lane_change_eval(waypoints)
+        self.lappin.update_lapcount()
+        if obj:
+            self.lane_shift = self.lane_change_eval(waypoints)
         
         
         waypoints[:,1]+=self.lane_shift
@@ -253,11 +257,14 @@ class PurePursuit:
         left_change_avaliable = ((waypoint27.lane_change==2 or waypoint27.lane_change ==3) and waypoint27.left_lane_marking.type == 1)
 
         object_detected = False
+        print(self.lappin.lapcount)
+        current_blocked = self.blocked_points_index[int((self.lappin.lapcount-1)%4)]
         for i, point in enumerate(self.blocked_points):
             dis_from_object_x = (t.location.x - point[0])+.5*v.x
             dis_from_object_y = (t.location.y - point[1])+.5*v.y
             if -10 < dis_from_object_x < 10 and -10 < dis_from_object_y < 10:
-                if not i in [1,3,8, 9,10,12,13,15,18,23,26]:
+
+                if i in current_blocked:
                 # if True:
                     if time.time()-self.start_time > 20:
                         object_detected = True
@@ -328,8 +335,8 @@ class PurePursuitPlusPID:
         self.pure_pursuit = pure_pursuit
         self.pid = pid
 
-    def get_control(self,waypoints, speed, desired_speed, dt, cornering_mult=1):
-        steer, alpha = self.pure_pursuit.get_control(waypoints, speed)
+    def get_control(self,waypoints, speed, desired_speed, dt, obj, cornering_mult=1):
+        steer, alpha = self.pure_pursuit.get_control(waypoints, speed, obj)
         #print(alpha)
         if alpha is None:
             self.pid.set_point = desired_speed
@@ -339,3 +346,69 @@ class PurePursuitPlusPID:
         return a, steer
 
 
+class Lapping():
+    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,vehicle):
+        """A function to intialize an Obstacles spawing object
+        
+        Given: 
+        waypointroadids: The string of the location of the csv file with waypoint roadids
+        waypointlaneids: The string of the location of the csv file with waypoint laneids
+        waypointdistances: The string of the location of the csv file with waypoint distances
+        worldobject: The world as the object class defined in this file
+        worldcarla: The carla world object
+        """
+        self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
+        self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
+        self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
+        self.lapcount=0
+        self.vehicle=vehicle
+        self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
+        self.spawn_index = -5  
+        self.simtime = time.time()
+        #self.reset(object_type, spawn_index)     
+        
+        
+    
+    def waypointfileProcessorint(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader, None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                column_data[i] = int(column_data[i][0])
+        return column_data
+        
+    def waypointfileProcessorString(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row[0].strip())
+        return column_data
+    
+    def waypointfileProcessorfloat(self,csv_file):
+        column_data = []
+        with open(csv_file) as file:
+            reader = csv.reader(file)
+            next(reader,None)
+            for row in reader:
+                column_data.append(row)
+            for i in range(len(column_data)):
+                 column_data[i]=float(column_data[i][0])
+        return column_data
+        
+        
+    def update_lapcount(self):
+        current_pos = self.vehicle.get_location()
+        if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0 and time.time()-self.simtime > 5:
+            self.lapcount += 1
+            
+            self.simtime=time.time()#Change to change the time it roughly takes to get out of the start zone
+
+            
+                
+    
+  

@@ -55,8 +55,6 @@ class Waypoint_Finder(object):
 		self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
 		self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
 		self.vehicle_spawn=self.map.get_waypoint_xodr(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
-		print(self.vehicle_spawn)
-		print(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
 		self.timing=0
 		self.lapcount=0
 

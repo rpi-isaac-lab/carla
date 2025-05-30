@@ -48,7 +48,6 @@ except IndexError:
 
 sys.path.append(os.path.join(this_dir,"..","..","isaac_gh_carla","LaneCenteringAlgorithm"))
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
-from mpc_control import pursuitplusMPC #import other controller
 
 # ==============================================================================
 # -- imports -------------------------------------------------------------------
@@ -459,7 +458,7 @@ class DualControl(object):
 # ==============================================================================
 
 class BlendedControl(DualControl):
-    def __init__(self,world,agent):
+    def __init__(self,world,agent,weight):
         """
             The blended controller inherits everything from the Dual Controller.
             Then we overwrite the function that parses the vehicle events to 
@@ -467,6 +466,7 @@ class BlendedControl(DualControl):
         """
         super().__init__(world,False)
         self._agent = agent
+        self.weight = weight
         
     # blend a new control into self._control
     # note that our agent only returns throttle, steer, and brake   
@@ -563,7 +563,7 @@ class BlendedControl(DualControl):
                 # This is where you would add the call to the Agent
                 agent_control = carla.VehicleControl()
                 agent_control = self._agent.act(agent_control,world)
-                self.blend_controls(agent_control, 0) #0 for manual control
+                self.blend_controls(agent_control, self.weight)
 
                 self._control.reverse = self._control.gear < 0
             elif isinstance(self._control, carla.WalkerControl):
@@ -579,7 +579,7 @@ class BlendedControl(DualControl):
 # ==============================================================================
 
 class Agent():
-    def __init__(self):
+    def __init__(self,args):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID() #Uncomment for PID
         #waypoints=self.createwaypointlist()
@@ -597,6 +597,7 @@ class Agent():
         self.prev_road_id = 2
 
         self.road_waypoint_array = np.loadtxt("Road_Start_and_ends.txt",delimiter=" ", dtype=int)
+        self.obj = args.obstacles
         return
     
     def act(self,controls,world):
@@ -634,7 +635,7 @@ class Agent():
         current_time = time.time()
         delta_t = current_time-self.prev_time
         waypoints = self.find_waypoints(world.player,map,inclusive=10)
-        a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,cornering_mult=self.cornering_speed_mult)
+        a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,self.obj,cornering_mult=self.cornering_speed_mult)
         # update the prev_time
         self.prev_time = current_time
         if steer is not None:
@@ -774,7 +775,7 @@ class Agent():
         #print("="*40)
         #print("="*40)
         # if temp_var:
-        # print(body_waypoints)
+        #     print(body_waypoints)
         return body_waypoints
     
     def waypointfileProcessorint(self,csv_file):
@@ -1280,8 +1281,6 @@ class Lapping():
         self.simtime=simtime
         self.agent=agent
         self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
-        # print(self.vehicle_spawn)
-        # print(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
         self.spawn_index = -5  
         #self.reset(object_type, spawn_index)     
         
@@ -1357,8 +1356,8 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(client.get_world(), hud, args.filter)
-        agent = Agent()
-        controller = BlendedControl(world,agent)
+        agent = Agent(args)
+        controller = BlendedControl(world,agent,args.weight)
         hud.add_controller(controller)
         lap=Lapping('/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv',world,client.get_world(),hud.simulation_time,agent)
         lap.simulation_file()
@@ -1422,6 +1421,17 @@ def main():
         metavar='PATTERN',
         default='vehicle.*',
         help='actor filter (default: "vehicle.*")')
+    argparser.add_argument(
+        '-w', '--weight',
+        default=1,
+        type=float,
+        help='Controller Percentage')
+    argparser.add_argument(
+        '-o', '--obstacles',
+        default=True,
+        type=bool,
+        help='Obstacle presence (default on)')
+    
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
