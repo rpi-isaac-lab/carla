@@ -1,0 +1,54 @@
+If something goes wrong with the simulation closing and it can't restart, try a computer restart, this will undo changes to steering wheel resistance
+
+To launch Simulation, use one of the following trial files:
+Trial 1: maunal control, no cones
+Trial 2: blended control, .5 weight, no cones, 
+Trial 3: maunal control, cones
+Trial 4: blended control, .5 weight, cones
+
+Participent data is save in ParticipentData/T#, where # corrispawns to the trial run
+Data logs are in the form of P[Participent id]R[Run number]
+Participent id is a value asked for after running the trial bash file before the sim launches
+Run number is an autoiterating value based on the existing data logs
+
+To change blended control weight during sim, use keypad, the following keys are bound:
+0: 0%
+1: 25%
+2: 50%
+3: 75%
+4: 100%
+
+To change bindings, go to /home/labstudent/carla/PythonAPI/max_testing/manual_control_steeringwheel.py, search for #Map keypad keys to weight changes, change self.weight = .25 to desired value
+
+Trials are customised using file args
+
+Katie_Logger:
+trial (t), integer, trial type, effect: datalog placment
+participent id (d), integer, effect: datalog naming
+obstacles (o), boolen, obstacle presence, effect: correct tracking of automatic steering
+
+manual_control_steeringwheel:
+obstacles (o), boolen, obstacle presence, effect: spawns obstacles, automatic steering around obstacles, default: false
+weight (w), float, automatic control weight, effect: percentage of automatic control in blending, 0 for manual control, defaul value: 1
+
+Known used files
+run_trial1.sh
+run_trial2.sh
+run_trial3.sh
+run_trial4.sh
+/home/labstudent/carla/PythonAPI/util/config.py
+/home/labstudent/carla/PythonAPI/max_testing/Katie_Logger.py
+/home/labstudent/carla/PythonAPI/max_testing/manual_control_steeringwheel.py
+/home/labstudent/carla/PythonAPI/max_testing/test_ff.py (possibly unused, mcs)
+/home/labstudent/carla/PythonAPI/max_testing/pure_pursuit.py
+/home/labstudent/carla/PythonAPI/max_testing/cone3.py
+/home/labstudent/carla/PythonAPI/max_testing/get_target_point.py
+/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsRoadIDs.csv
+/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsLaneIDs.csv
+/home/labstudent/carla/PythonAPI/max_testing/Data/ExactObjectWaypointsS.csv
+/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointRoadIDS.csv
+/home/labstudent/carla/PythonAPI/max_testing/Data/WaypointLaneIDs.csv
+home/labstudent/carla/PythonAPI/max_testing/Data/WaypointDistances.csv
+/home/labstudent/carla/PythonAPI/max_testing/Data/waypointIDS.csv
+wheel_config.ini
+Road_Start_and_ends.txt
