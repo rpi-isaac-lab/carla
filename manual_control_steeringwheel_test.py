@@ -172,7 +172,7 @@ class World(object):
         #blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
         # Get a Lincoln Mkz 2020
         blueprint = self.world.get_blueprint_library().find("vehicle.lincoln.mkz_2020")
-        # blueprint = self.world.get_blueprint_library().find("vehicle.gazelle.omafiets") #Uncomment for bicycle
+        blueprint = self.world.get_blueprint_library().find("vehicle.gazelle.omafiets") #Uncomment for bicycle
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
@@ -181,7 +181,7 @@ class World(object):
         # print("Player is", self.player)
         # print(self.player is not None)
         if self.player is not None:
-            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=1), carla.Rotation(yaw=0))
+            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=5), carla.Rotation(yaw=0))
             """
             spawn_point = self.player.get_transform()
             spawn_point.location.z += 2.0
@@ -197,7 +197,7 @@ class World(object):
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             """
-            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=0.2), carla.Rotation(yaw=0))
+            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=5), carla.Rotation(yaw=0))
             blueprint_library = self.world.get_blueprint_library()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 
@@ -297,7 +297,6 @@ class DualControl(object):
         self._reverse_idx = int(self._parser.get('G29 Racing Wheel', 'reverse'))
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
-        self.lane_change_status = False
         
         # actor_list = world.get_actors()
         # for id in actor_list:
@@ -429,21 +428,6 @@ class DualControl(object):
             brakeCmd = 1
 
         self._control.steer = steerCmd
-        
-        if (steerCmd) > .1:
-            if not self.lane_change_status:
-                self._agent.pp.pure_pursuit.update_lane_change(1)
-                self.lane_change_status = True
-                print("Steer input recieved. changing lanes")
-        elif steerCmd < -.1:
-            if not self.lane_change_status:
-                self._agent.pp.pure_pursuit.update_lane_change(-1)
-
-                print("Steer input recieved, changing lanes")
-                self.lane_change_status = True
-        elif -.1 < steerCmd < .1 and self.lane_change_status:
-            self.lane_change_status = False
-            
         # print(self._control.steer,"412")
 
         self._control.brake = brakeCmd
@@ -557,12 +541,17 @@ class BlendedControl(DualControl):
                     self.weight = 0
                     print("Weight set to 0") #active print
                 elif event.key == 1073741917:
-                #6 key, lane change?
-                    try:
-                        print("Button")
-                        self._agent.pp.pure_pursuit.update_lane_change(-1)
-                    except Exception as e:
-                        print(e) #active print
+                    spawn_point = carla.Transform(carla.Location(x=162.4, y=192.7, z=5), carla.Rotation(yaw=180))
+                    actor_list = world2.get_actors()
+
+                    for id in actor_list:
+                        
+                        try:
+                            if id.attributes["role_name"] == "hero":
+                                print("player identified")
+                                id.set_transform(spawn_point)
+                        except:
+                            continue
                     #5 key, spawns tree (disabled)
                     
                     # self.weight = 0
@@ -578,8 +567,7 @@ class BlendedControl(DualControl):
                 elif event.key == 1073741918:
                     #6 key, lane change?
                     try:
-                        print("Button")
-                        self._agent.pp.pure_pursuit.update_lane_change(1)
+                        self._agent.pp.pure_pursuit.update_lane_change()
                     except Exception as e:
                         print(e) #active print
                 elif event.key == K_BACKSPACE:
@@ -715,13 +703,12 @@ class Agent():
         # If inclusive is not None, waypoints must be in list inclusive
         #This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
-
         waypoints = [nwp]
         index=-1
         temp_var = False
         locations = np.zeros(shape=(number,4))
         locations[:,3] = 1
-        # print(nwp.is_junction, nwp.road_id, self.prev_road_id != nwp.road_id)
+        # print(nwp.is_junction)
         if nwp.is_junction and nwp.road_id != 1959:
             if self.prev_road_id in [4,3,2,1]:
                 next_road = self.prev_road_id -1
@@ -747,13 +734,12 @@ class Agent():
 
             locations[:,1]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+1],self.road_waypoint_array[next_road_index,next_road_loc_index+1],number)+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
             locations[:,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number)+nwp.transform.location.z
-          
         else:
             if nwp.road_id in [0,1,2,3,4,65,66,67,68,69] and self.prev_road_id != nwp.road_id:
                 self.prev_road_id = nwp.road_id
 
             wps = nwp.next_until_lane_end(max_dist/number)
-            # print(len(wps) < number)
+            
             if len(wps) < number:
                 for i in range(len(wps)):
                     waypoint_next = wps[i]
@@ -781,12 +767,10 @@ class Agent():
                 if nwp.road_id != 68:
                     next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
                     prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
+                    locations[len(wps):,0]=np.linspace(carla_loc.x,self.road_waypoint_array[next_road_index,next_road_loc_index],number-len(wps))+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
 
-                    locations[len(wps):,0]=np.linspace(carla_loc.x,self.road_waypoint_array[next_road_index,next_road_loc_index],number)[:number-len(wps)]
-
-                    locations[len(wps):,1]=np.linspace(carla_loc.y,self.road_waypoint_array[next_road_index,next_road_loc_index+1],number)[:number-len(wps)]
+                    locations[len(wps):,1]=np.linspace(carla_loc.y,self.road_waypoint_array[next_road_index,next_road_loc_index+1],number-len(wps))+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
                     locations[len(wps):,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number-len(wps))+nwp.transform.location.z
-                    # print(locations[-10:,:2])
                 else:
                     next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
                     prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
@@ -1410,17 +1394,7 @@ class Lapping():
         if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
             self.lapcount += 1
             print('Lap ' + str(self.lapcount)) #active print
-            if self.lapcount > 4:
-                print("Simulation over, please hit CTRL+C on the terminal to exit the vehicle.")
             
-                t = self.worldobject.player.get_transform()
-                
-                cone_library = self.worldcarla.get_blueprint_library()
-                cone = cone_library.find("static.prop.fountain")
-                cone.set_attribute('role_name', 'tree')
-                this_cone = self.worldcarla.spawn_actor(cone,t)
-                this_cone.set_enable_gravity(False) #Turn this back on
-                this_cone.set_simulate_physics(False)
                 
                 
             if self.obstacles:
@@ -1456,9 +1430,6 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(client.get_world(), hud, args.filter, args)
-
-        world.camera_manager.toggle_camera()
-
         agent = Agent(args)
         controller = BlendedControl(world,agent,args.weight)
         hud.add_controller(controller)
