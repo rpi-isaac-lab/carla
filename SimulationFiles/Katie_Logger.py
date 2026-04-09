@@ -74,12 +74,23 @@ class Waypoint_Finder(object):
 		self._parser = ConfigParser()
 		self._parser.read('wheel_config.ini')
 		self._steer_idx = int(self._parser.get('G29 Racing Wheel', 'steering_wheel'))
-
+		self._throttle_idx = int(
+			self._parser.get('G29 Racing Wheel', 'throttle'))
+		self._brake_idx = int(self._parser.get('G29 Racing Wheel', 'brake'))
+		
 		numAxes = self._joystick.get_numaxes()
 		self.jsInputs = [float(self._joystick.get_axis(i)) for i in range(numAxes)]
 		self.base_steer = self.jsInputs[self._steer_idx]
 
 		self.obj = args.obstacles
+
+		self.left_turn_signal = False
+		self.right_turn_signal = False
+
+		self.score = 0
+		self.cooldowntim = time.time()
+		self.parking = False
+		
 
 
 		
@@ -121,8 +132,14 @@ class Waypoint_Finder(object):
 		return column_data
 	
 	def _on_collision(self,event):
+
+
 		actor_type = get_actor_display_name(event.other_actor)
 		self.collision = actor_type
+		if time.time()-self.cooldowntim > 5:
+			# print("Ow")
+			self.cooldowntim = time.time()
+			self.score -= 10
 		return actor_type
 	
 	def _on_invasion(self,event):
@@ -136,8 +153,9 @@ class Waypoint_Finder(object):
 		try:
 			f = open(filename,"w+")
 			f.write("time,Lap Count, ")
-			f.write("Lateral Position,Lane Invasion, Collision Sensor,Lane Change,")
+			f.write("Lateral Position,Score,Lane Invasion, Collision Sensor,Lane Change,")
 			f.write("Steering Angle,User Steering Angle,Controler Steering Angle,")
+			f.write("Throttle,User Throttle,User Brake,Controller Accel,")
 			f.write("User X Position,User Y Position,User Z Position, User Pitch, User Roll, User Yaw,")
 			f.write("User X velocity, User Y velocity, User Z velocity,")
 			f.write("wloc X Position,wloc Y Position,wloc Z Position, wloc Pitch, wRoll, wloc Yaw,") 
@@ -177,15 +195,42 @@ class Waypoint_Finder(object):
 					# print(event.type)
 					if event.type == 1536:
 						self.base_steer = event.value
+					if event.type == pygame.JOYBUTTONDOWN:
+						if event.button == 5:
+							
+							self.left_turn_signal = True
+							# self.turnsignalontime = time.time()
+							# if self.hud.turn ==0:
+							# 		self.lanegoal = 'Right'
+							# 		self.hud.turn = -1
+							# 		self._agent.pp.pure_pursuit.update_lane_change(-1)
+							# else:
+							# 		self.hud.turn = 0       
+							# 		self._agent.pp.pure_pursuit.update_lane_change(0)               
+						elif event.button == 4:
+							
+							
+							self.right_turn_signal = True
+							# self.turnsignalontime = time.time()
+
+							# if self.hud.turn ==0:
+							# 		self.lanegoal = 'Left'
+							# 		self.hud.turn = 1
+							# 		self._agent.pp.pure_pursuit.update_lane_change(1)
+							# else:
+							# 		self.hud.turn = 0
+							# 		self._agent.pp.pure_pursuit.update_lane_change(0)
+						if event.button == 0:
+							self.parking = not self.parking
 				curr_time = time.time()
 				if curr_time-last_time >= 1/refresh_rate:
 
 					last_time = curr_time
 					t = vehicle.get_transform()
-					v=vehicle.get_velocity()
+					v = vehicle.get_velocity()
 
-					user_steer = self.joystick_control()
-					auto_steer = self.pd_controller()
+					user_steer, user_throttle, user_brake = self.joystick_control()
+					a, auto_steer = self.pd_controller()
 					# print(user_steer)
 
 					nwp = self.map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving))
@@ -227,27 +272,49 @@ class Waypoint_Finder(object):
 						shoulder_ahead_x = None
 						shoulder_ahead_y = None
 						shoulder_ahead_z = None
+
+					try: #changed from world.get_location to vehicle.get_location and added a definition for speed_kmh which was not present here.
+						w27 = self.world.get_map().get_waypoint(vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+						self.speed_kmh = (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
+						if str(w27.right_lane_marking.type) == 'Solid':
+							self.score+=1/200.*self.speed_kmh/(1.6*40.)
+						elif w27.is_junction:
+							self.score+=1/200.*self.speed_kmh/(1.6*40.)
+								# self.lane = 'Junction'
+
+						else:
+							self.score+=1/200.*self.speed_kmh/(1.6*40.)
+
+					except:
+						self.score *= 1.
 					
-					if user_steer > .1:
-						lane_change = 1
-					elif user_steer < -.1:
-						lane_change = -1
-					else: 
-						lane_change = 0
+					lane_change = 0
+					if self.left_turn_signal:
+						lane_change -= 1
+					if self.right_turn_signal:
+						lane_change += 1
+
 	
+					
+
 					f.write("{},{},".format(self.simulation_time,self.lapcount))
-					f.write("{},{},{},{},".format(latdistance,self.laneinvade,self.collision,lane_change))
+					f.write("{},{},{},{},{},".format(latdistance,self.score,self.laneinvade,self.collision,lane_change))
 					f.write("{},{},{},".format(vehicle.get_control().steer,user_steer,auto_steer))
+					f.write("{},{},{},{},".format(vehicle.get_control().throttle,user_throttle,user_brake,a))
 					f.write("{},{},{},{},{},{},".format(t.location.x,t.location.y,t.location.z,t.rotation.pitch,t.rotation.roll,t.rotation.yaw))
 					f.write("{},{},{},".format(v.x,v.y,v.z))
 					f.write("{},{},{},{},{},{},".format(wloc.location.x,wloc.location.y,wloc.location.z,wloc.rotation.pitch,wloc.rotation.roll,wloc.rotation.yaw)) 
 					f.write("{},{},{},".format(center_ahead_x,center_ahead_y,center_ahead_z))
-					f.write("{},{},{}\n,".format(shoulder_ahead_x,shoulder_ahead_y,shoulder_ahead_z))
+					f.write("{},{},{}\n".format(shoulder_ahead_x,shoulder_ahead_y,shoulder_ahead_z))
 					
 					if self.laneinvade != None:
 						self.laneinvade = None
 					if self.collision != None:
 						self.collision = None
+					if self.right_turn_signal:
+						self.right_turn_signal = False
+					if self.left_turn_signal:
+						self.left_turn_signal = False
 					
 		except KeyboardInterrupt:
 			f.close()
@@ -261,11 +328,11 @@ class Waypoint_Finder(object):
 		current_time = time.time()
 		delta_t = current_time-self.pd_prev_time
 		waypoints = self.find_waypoints(self.vehicle,map,inclusive=10)
-		a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,self.obj,cornering_mult=self.cornering_speed_mult)
+		a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,self.obj,20,cornering_mult=self.cornering_speed_mult)
 		# update the prev_time
 		self.pd_prev_time = current_time
 		
-		return steer
+		return a, steer
 	
 	def joystick_control(self):
 		K1 = 1.0  # 0.55
@@ -279,7 +346,21 @@ class Waypoint_Finder(object):
 			steerCmd = 440.4*base_steering**3
 		else:
 			steerCmd = K1 * math.tan(1.1 * base_steering)
-		return steerCmd
+
+		K2 = 1.6  # 1.6
+		throttleCmd = K2 + (2.05 * math.log10(-0.7 * jsInputs[self._throttle_idx] + 1.4) - 1.2) / 0.92
+		if throttleCmd <= 0:
+			throttleCmd = 0
+		elif throttleCmd > 1:
+			throttleCmd = 1
+
+		brakeCmd = 1.6 + (2.05 * math.log10(-0.7 * jsInputs[self._brake_idx] + 1.4) - 1.2) / 0.92
+		if brakeCmd <= 0:
+			brakeCmd = 0
+		elif brakeCmd > 1:
+			brakeCmd = 1
+		
+		return steerCmd, throttleCmd, brakeCmd
 	
 	
 	def find_waypoints(self,vehicle,map,number=200,max_dist=20,inclusive=None):
@@ -411,6 +492,11 @@ if __name__ == "__main__":
 		help='Participent ID')
 	argparser.add_argument(
 		'-o', '--obstacles',
+		default=False,
+		type=bool,
+		help='Obstacle presence (default on)')
+	argparser.add_argument(
+		'-op', '--obstacles_present',
 		default=False,
 		type=bool,
 		help='Obstacle presence (default on)')
