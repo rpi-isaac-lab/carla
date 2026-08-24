@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#Records waypoints to file, refresh rate dependent, only saves junction
+# Additionally, function that records random waypoints
+#code from check_waypoints 
 
 
 import glob

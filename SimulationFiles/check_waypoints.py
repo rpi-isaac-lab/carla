@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+#Prints nearest waypoint to active vechile every .5 seconds
 
 import glob
 import os

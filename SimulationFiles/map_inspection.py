@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#prints all waypoints on map
+
 import glob
 import os
 import sys

@@ -10,6 +10,9 @@
 
 """
 
+#spawns cones at specified coordinates
+#Replaced with code that pulls from csv
+
 import glob
 import os
 import sys

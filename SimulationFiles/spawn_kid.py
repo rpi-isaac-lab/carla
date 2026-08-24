@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#spawns random kid
+
 import glob
 import os
 import sys

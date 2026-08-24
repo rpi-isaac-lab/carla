@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+#Records waypoints to file, refresh rate dependent, only saves junction
+#code from check_waypoints
 
 import glob
 import os
@@ -48,7 +50,7 @@ class Waypoint_Finder(object):
 			    try:
 			        if id.attributes["role_name"] == "hero":
 			            vehicle = id
-			            break
+						break
 			    except:
 			        continue
 			if vehicle is None:

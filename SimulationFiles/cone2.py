@@ -10,6 +10,9 @@
 
 """
 
+# spawns objects other than cones at coordinates from csv
+
+
 import glob
 import os
 import sys

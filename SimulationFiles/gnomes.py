@@ -10,6 +10,8 @@
 
 """
 
+#Spawns gnomes along route
+
 import glob
 import os
 import sys

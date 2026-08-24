@@ -10,6 +10,9 @@
 
 """
 
+#Spawns cones at every waypoint in Exact Object waypoints (Katie). 
+# Replaced with file that only spawns selected cones for simulation (Thea)
+
 import glob
 import os
 import sys
