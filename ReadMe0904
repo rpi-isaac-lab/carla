@@ -5,6 +5,7 @@ Trial 1: maunal control, no cones
 Trial 2: blended control, .5 weight, no cones, 
 Trial 3: maunal control, cones
 Trial 4: blended control, .5 weight, cones
+Trial 2a: Teleporting bicycle, autocontrol, no cones
 
 Participent data is save in ParticipentData/T#, where # corrispawns to the trial run
 Data logs are in the form of P[Participent id]R[Run number]
