@@ -40,7 +40,7 @@ def CONE1(world, obstacletype, loop_count = 1):
     waypointlaneids=np.loadtxt('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsLaneIDs.csv',int,skiprows=1)
     waypointdistances=np.loadtxt('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsS.csv',float,skiprows=1)
     obslocs = np.loadtxt('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/myfile.txt',delimiter=',')
-    print(obslocs.shape)
+    # print(obslocs.shape)
     blocked_points_index = [[4, 3, 17, 11], [2, 19, 0, 5], [24, 22, 14, 6], [7, 16, 25, 21]]
     blocked_points = blocked_points_index[int((loop_count-1)%4)]
     print("Loop" , int((loop_count-1)%4))

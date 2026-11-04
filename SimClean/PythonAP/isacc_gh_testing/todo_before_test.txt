@@ -1,0 +1,22 @@
+Change cone locations from waypoint based to transform based
+
+Update find_waypoints, pull from file?
+Enable tree
+
+mapping file
+increase/decrease weight
+increase/decrease overdistance
+
+Katielogger is not synced with main file (updating anyway)
+
+Start location from file/var?
+
+pure_pursuit cone function replace with pull from file 
+
+seperate files for known and unknown objects (how do i want to handle this)
+
+Can't handle being in more than one object bounding box at a time
+
+
+negative waypoint shift -> move into left lane
+positive waypoint shift -> move into right lane

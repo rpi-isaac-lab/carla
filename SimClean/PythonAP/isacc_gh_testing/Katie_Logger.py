@@ -35,7 +35,7 @@ else:
     from ConfigParser import RawConfigParser as ConfigParser
 
 from pure_pursuit import PurePursuit,PurePursuitPlusPID
-from cone3_copy import CONE1
+
 
 
 def get_actor_display_name(actor, truncate=250):
@@ -269,7 +269,7 @@ class Waypoint_Finder(object):
 						shoulder_ahead_x = shoulder_ahead.x
 						shoulder_ahead_y = shoulder_ahead.y
 						shoulder_ahead_z = shoulder_ahead.z
-						# CONE1(self.world,"static.prop.gnome",waypoint27.next(20)[0].transform)
+						
 					except:
 						shoulder_ahead_x = None
 						shoulder_ahead_y = None

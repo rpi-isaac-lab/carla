@@ -26,7 +26,7 @@ import carla
 import argparse
 import time
 import math
-from cone3_copy import CONE1
+import map_config
 
 def CONE(world):
     """
@@ -38,11 +38,7 @@ def CONE(world):
     waypointlaneids=np.loadtxt('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsLaneIDs.csv',int,skiprows=1)
     waypointdistances=np.loadtxt('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsS.csv',float,skiprows=1)
     
-    
-
     map = world.get_map()
-    
-    
 
     bloack_array = []
 
@@ -125,12 +121,9 @@ class PurePursuit:
         self.blocked_points_index = [[4, 3, 17, 11], [2, 19, 0, 5], [24, 22, 14, 6], [7, 16, 25, 21]]
         
 
-        self.waypointroadids = self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointRoadIDS.csv')
-        self.waypointlaneids = self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointLaneIDs.csv')
-        self.waypointdistances = self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointDistances.csv')
         self.lapcount=0
         self.map = self.world.get_map()
-        self.vehicle_spawn=self.map.get_waypoint_xodr(self.waypointroadids[0],self.waypointlaneids[0],self.waypointdistances[0])
+        self.vehicle_spawn_loc=self.map.get_waypoint_xodr(map_config.vehicle_spawn_roadid,map_config.vehicle_spawn_laneid,map_config.vehicle_spawn_S).transform.location
         self.current_blocked = [4,3,17,11]
         self.spawn_index = -5  
         self.simtime = time.time()
@@ -138,7 +131,7 @@ class PurePursuit:
         self.lane_change_direction = -1
 
         self.lane_change = False
-        self.lane_goal = 'Left'
+        self.lane_goal = 'Right'
 
         self.near_obj = 0
         self.unknown_obj = [11,3,2,0,24,6,25,16]
@@ -148,24 +141,22 @@ class PurePursuit:
         
     def update_lane_change(self,lane_change_direction = -1):
         if lane_change_direction == 0:
+            #Stop Changing Lanes
             self.lane_change = False
         else:
+            #Activate Changing Lanes
             self.lane_change = True
 
-        
+
+            #Correct direction
             self.lane_change_direction = lane_change_direction
             if lane_change_direction == 1:
-                self.lane_goal = 'Left'
-            else:
-                
                 self.lane_goal = 'Right'
+            else:
+                self.lane_goal = 'Left'
 
-     
-
-        
         self.start_lanechange = time.time()
 
-        #print(self.lane_change)
         return
     
     def waypointfileProcessorint(self,csv_file):
@@ -179,14 +170,6 @@ class PurePursuit:
                 column_data[i] = int(column_data[i][0])
         return column_data
         
-    def waypointfileProcessorString(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row[0].strip())
-        return column_data
     
     def waypointfileProcessorfloat(self,csv_file):
         column_data = []
@@ -202,17 +185,15 @@ class PurePursuit:
         
     def update_lapcount(self):
         current_pos = self.vehicle.get_location()
-        if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0 and time.time()-self.simtime > 5:
+        if current_pos.distance(self.vehicle_spawn_loc) < 10.0 and time.time()-self.simtime > 5:
             self.lapcount += 1
-            # print(self.lapcount)
-            # print(self.blocked_points_index[int((self.lapcount-1)%4)])
+            
             self.current_blocked = self.blocked_points_index[int((self.lapcount-1)%4)]
             self.simtime=time.time()#Change to change the time it roughly takes to get out of the start zone
         
         self.start_time = time.time()
     
     def _on_invasion(self,event):
-        # print(event.crossed_lane_markings)
         self.laneinvade = True
         return
     
@@ -235,15 +216,17 @@ class PurePursuit:
                     continue
         Laneinvade=self.lanesensor.listen(lambda event: self._on_invasion(event))
         self.look_ahead_distance = np.clip(self.K_dd * speed, 5,10) #Decrease lookahead from 20
+        
         try:
+            #Is this prone to throwing errors? Why is it in an except
             self.update_lapcount()
         except:
             cat = 0 
             
         if obj:
-            # self.lane_change_eval(waypoints)
             if not self.lane_change:
-                self.lane_shift = self.lane_change_eval(waypoints,over_distance)
+                self.lane_shift = self.lane_change_eval(over_distance)
+
         steer_change = 0
         try:
             if self.lane_change:
@@ -265,7 +248,7 @@ class PurePursuit:
 
         
 
-        current_vehicle_location = self.vehicle.get_transform()
+        # current_vehicle_location = self.vehicle.get_transform()
         
                     
 
@@ -289,7 +272,7 @@ class PurePursuit:
             return None, None
 
         
-        t = self.vehicle.get_transform()
+        # t = self.vehicle.get_transform()
         
         alpha = np.arctan2(track_point[1], track_point[0])
         
@@ -301,29 +284,17 @@ class PurePursuit:
         
         waypoints[:,1]-=self.lane_shift
         
-        
-        #Override for attempted sharp turns in intersections by controller, unknown source
-        # if nwp.road_id == 1959:
-        #     if nwp.s < 20:
-        #         steer = steer/2
-        #     print(nwp.s,steer*(180/3.14))
+       
         t = self.vehicle.get_transform()
-        # print(t.location.x, t.location.y)
-        # print()
-
-        # if t.location.x > -60:
-        #     print(nwp.road_id, steer)
         
+        #Hardcoded troublemakers
         if nwp.road_id == 1933 and steer < 0:
             return -steer, alpha
         if steer > .4:
             waypoint27 = self.world.get_map().get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
             # print(waypoint27.road_id)
             
-            if waypoint27.is_junction:
-                # print(waypoint27.junction_id)
-                # if waypoint27.junction_id == 861:
-                
+            if waypoint27.is_junction:               
 
                 # print("Override")
                 
@@ -333,72 +304,41 @@ class PurePursuit:
         return steer, alpha
     
     def what_lane_am_I_in(self):
-        w27 = self.world.get_map().get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+
         
+        w27 = self.world.get_map().get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+
+        #Correct directions
         if str(w27.right_lane_marking.type) == 'Solid':
-            return 'Left'
-        if str(w27.right_lane_marking.type) == 'Broken':
             return 'Right'
+        if str(w27.right_lane_marking.type) == 'Broken':
+            return 'Left'
         return 'idk'
 
     
-    def lane_change_eval(self,waypoints,over_distance):
-        waypoint27 = self.world.get_map().get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+    def lane_change_eval(self,over_distance):
         
         t = self.vehicle.get_transform()
         v=self.vehicle.get_velocity()
 
-        nwp = self.map.get_waypoint(self.vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving))
-        wloc=nwp.transform #Get waypoint 3D location
-        latdistance= math.sqrt((t.location.x-wloc.location.x)**2+(t.location.y-wloc.location.y)**2)
+        nwp = self.map.get_waypoint(t.location,project_to_road=True,lane_type=(carla.LaneType.Driving))
 
-        right_change_avaliable = ((waypoint27.lane_change==1 or waypoint27.lane_change ==3) and waypoint27.right_lane_marking.type == 1)
-        left_change_avaliable = ((waypoint27.lane_change==2 or waypoint27.lane_change ==3) and waypoint27.left_lane_marking.type == 1)
+        #Preventing junction changes
+        right_change_avaliable = ((nwp.lane_change==1 or nwp.lane_change ==3) and nwp.right_lane_marking.type == 1)
+        left_change_avaliable = ((nwp.lane_change==2 or nwp.lane_change ==3) and nwp.left_lane_marking.type == 1)
 
-        object_detected = False
-        
-        # for i, point in enumerate(self.blocked_points):
-        #     dis_from_object_x = (t.location.x - point[0])+.5*v.x
-        #     dis_from_object_y = (t.location.y - point[1])+.5*v.y
-        #     xcat = 10
-        #     if abs((180/3.14*math.atan2(v.y,v.x))%360-(180/3.14*math.atan2((point[1]-t.location.y),(point[0]-t.location.x)))%360)<30 and math.sqrt(dis_from_object_x**2+dis_from_object_y**2) < 20:
-        #         xcat=20
-        #     if math.sqrt(dis_from_object_x**2+dis_from_object_y**2) < xcat: #obstacle bounding box
-        #         # print(i, self.current_blocked, i in self.current_blocked)
-                
-        #         if i in self.current_blocked:
-                    
-        #             # print(dis_from_object_x, dis_from_object_y)
-        #         # if True:
-        #             # print(i)
-        #             # if time.time()-self.start_time > 20:
-        #             object_detected = True
-        #             if self.new_object_feild:
-        #                 # print("Object Detected, id: " + str(i))
-        #                 # print(latdistance)
-        #                 self.new_object_feild = False
-        #             if i in [1,3,8, 9,10,12,13,15,18,23,26]:
-                        
-                        
-        #                 self.track_point = get_target_point(self.look_ahead_distance, waypoints)
-        #                 # print(time.time())
-                        
-        #             # print(dis_from_object_x/v.x, dis_from_object_y/v.y)
-                        
-
-        #         # print(object_detected)  
-        #         # 
-        
+        object_detected = False        
         
         for i in self.current_blocked:
             point =  self.blocked_points[i]
             dis_from_object_x = (t.location.x - point[0])+.5*v.x
             dis_from_object_y = (t.location.y - point[1])+.5*v.y
-            xcat = 10
+
+            xcat = 10 #Detection distance for after object passing
             if abs((180/3.14*math.atan2(v.y,v.x))%360-(180/3.14*math.atan2((point[1]-t.location.y),(point[0]-t.location.x)))%360)<30 and math.sqrt(dis_from_object_x**2+dis_from_object_y**2) < 40:
-                xcat=40
+                xcat=40 #Detection distance for before object
+
             if math.sqrt(dis_from_object_x**2+dis_from_object_y**2) < xcat: #obstacle bounding box
-                
             
                 object_detected = True
                 self.near_obj = i
@@ -413,22 +353,17 @@ class PurePursuit:
         if not object_detected and not self.new_object_feild:
             self.new_object_feild = True   
 
-        waypoint27 = self.world.get_map().get_waypoint(self.vehicle.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
-        
         if object_detected:
             # print("Approaching, id: " + str(self.near_obj))
             point =  self.blocked_points[self.near_obj]
             dis_from_object_x = (t.location.x - point[0])+.5*v.x
             dis_from_object_y = (t.location.y - point[1])+.5*v.y
             if self.near_obj in self.unknown_obj:
-                # print("Object "+ str(self.near_obj)+" Unknown")
                 return 0
             
             if math.sqrt(dis_from_object_x**2+dis_from_object_y**2) < over_distance:
                 # print("Over_distance fufilled")
                 if left_change_avaliable and not right_change_avaliable:
-                    # print(-2/1.5*latdistance, )
-                    # return -.5-latdistance
                     return -2
                 elif right_change_avaliable:
                     return 0
@@ -479,7 +414,7 @@ class PurePursuitPlusPID:
 
     def get_control(self,waypoints, speed, desired_speed, dt, obj,over_distance, cornering_mult=1):
         steer, alpha = self.pure_pursuit.get_control(waypoints, speed, obj,over_distance)
-        #print(alpha)
+        
         if alpha is None:
             self.pid.set_point = desired_speed
         else:
@@ -487,70 +422,3 @@ class PurePursuitPlusPID:
         a = self.pid.get_control(speed,dt)
         return a, steer
 
-
-class Lapping():
-    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,vehicle):
-        """A function to intialize an Obstacles spawing object
-        
-        Given: 
-        waypointroadids: The string of the location of the csv file with waypoint roadids
-        waypointlaneids: The string of the location of the csv file with waypoint laneids
-        waypointdistances: The string of the location of the csv file with waypoint distances
-        worldobject: The world as the object class defined in this file
-        worldcarla: The carla world object
-        """
-        self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
-        self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
-        self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
-        self.lapcount=0
-        self.vehicle=vehicle
-        self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
-        self.spawn_index = -5  
-        self.simtime = time.time()
-        #self.reset(object_type, spawn_index)     
-        
-        
-    
-    def waypointfileProcessorint(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader, None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                column_data[i] = int(column_data[i][0])
-        return column_data
-        
-    def waypointfileProcessorString(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row[0].strip())
-        return column_data
-    
-    def waypointfileProcessorfloat(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=float(column_data[i][0])
-        return column_data
-        
-        
-    def update_lapcount(self):
-        current_pos = self.vehicle.get_location()
-        if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0 and time.time()-self.simtime > 5:
-            self.lapcount += 1
-            
-            self.simtime=time.time()#Change to change the time it roughly takes to get out of the start zone
-
-            
-                
-    
-  

@@ -124,9 +124,7 @@ except ImportError:
 # -- wheel go brrr -------------------------------------------------------------
 # ==============================================================================
 
-# Not pretty, but functional
-from cone3 import CONE
-from cone3_copy import CONE1
+from cone4 import spawn_CONE, remove_CONE
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -155,14 +153,18 @@ class World(object):
         self.world = carla_world
         self.hud = hud
         self.player = None
+
         self.collision_sensor = None
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
+
         self.camera_manager = None
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
+        
         self.obstacles = args.obstacles
         self.obstacles_present = args.obstacles_present
+        
         self._actor_filter = actor_filter
         # print("init()")
         self.restart()
@@ -205,8 +207,9 @@ class World(object):
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
 
         if self.obstacles_present:
-            CONE(self.world,"static.prop.trafficcone01",0)
-            CONE1(self.world,"static.prop.streetbarrier",1)
+            spawn_CONE(self.world, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap0.txt" )
+
+        spawn_CONE(self.world, "static.prop.streetbarrier", "barrier_barry", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/myfile.txt" )
         
 
         # Set up the sensors.
@@ -322,26 +325,108 @@ class DualControl(object):
 
             # controller input
             elif event.type == pygame.JOYBUTTONDOWN:
+
+                #Parking
                 if event.button == 0:
-                    world.restart()
+                    self.parking = not self.parking
+
+                #Toggle HUD
                 elif event.button == 1:
                     world.hud.toggle_info()
+
+                #Toggle Camera View
                 elif event.button == 2:
                     world.camera_manager.toggle_camera()
+
+                #Change Weather
                 elif event.button == 3:
                     world.next_weather()
-                elif event.button == self._reverse_idx:
-                    self._control.gear = 1 if self._control.reverse else -1
+
+                #Left Lane Change
+                elif event.button == 5:
+                    self.turnsignalontime = time.time()
+                    if self.hud.turn ==0:
+                        # self.lanegoal = 'Left'
+                        self.hud.turn = -1
+                        self._agent.pp.pure_pursuit.update_lane_change(-1)
+                    else:
+                        self.hud.turn = 0       
+                        self._agent.pp.pure_pursuit.update_lane_change(0)               
+
+                #Right Lane Change
+                elif event.button == 4:
+                    
+                    self.turnsignalontime = time.time()
+
+                    if self.hud.turn ==0:
+                        # self.lanegoal = 'Right'
+                        self.hud.turn = 1
+                        self._agent.pp.pure_pursuit.update_lane_change(1)
+                    else:
+                        self.hud.turn = 0
+                        self._agent.pp.pure_pursuit.update_lane_change(0)
+
+                #Toggle Reverse
                 elif event.button == 23:
-                    world.camera_manager.next_sensor()
+                    self._control.gear = 1 if self._control.reverse else -1
+            
             
             # keyboard input
             elif event.type == pygame.KEYUP:
                 
                 if self._is_quit_shortcut(event.key):
                     return True
+
+                #Keypad
+                elif event.key == 1073741913:
+                    #1 key
+                    print("Weight set to .25") #active print
+                    self._agent.weight = .25
+                elif event.key == 1073741914:
+                    #2 key
+                    print("Weight set to .5") #active print
+                    self._agent.weight = .5
+                elif event.key == 1073741915:
+                    #3 key
+                    self._agent.weight = .75
+                    print("Weight set to .75") #active print
+                elif event.key == 1073741916:
+                    #4 key
+                    print("Weight set to 1") #active print
+                    self._agent.weight = 1
+                elif event.key == 1073741922:
+                    #0 key
+                    self._agent.weight = 0
+                    print("Weight set to 0") #active print
+                elif event.key == 1073741917:
+                #5 key, lane change?
+                    try:
+                        self._agent.pp.pure_pursuit.update_lane_change(-1)
+                    except Exception as e:
+                        print(e) #active print
+                elif event.key == 1073741918:
+                    #6 key, lane change?
+                    try:
+                        self._agent.pp.pure_pursuit.update_lane_change(1)
+                    except Exception as e:
+                        print(e) #active print
+                elif event.key == 1073741919:
+                    #7 Key - spawns tree disabled
+                    print("Tree Disabled")
+                    # t = world.player.get_transform()
+                    # t.location.z += 0
+                    # cone_library = world2.get_blueprint_library()
+                    # cone = cone_library.find("static.prop.fountain")
+                    # cone.set_attribute('role_name', 'tree')
+                    # this_cone = world2.spawn_actor(cone,t)
+                    # this_cone.set_enable_gravity(False) #Turn this back on
+                    # this_cone.set_simulate_physics(False)
+
+
+                        
                 elif event.key == K_BACKSPACE:
-                    world.restart()
+                    print("Restart Distabled")
+                    # world.restart()
                 elif event.key == K_F1:
                     world.hud.toggle_info()
                 elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
@@ -358,6 +443,12 @@ class DualControl(object):
                     world.camera_manager.set_sensor(event.key - 1 - K_0)
                 elif event.key == K_r:
                     world.camera_manager.toggle_recording()
+                elif event.key == K_s:
+                    file1 = open("myfile.txt", "a")
+                                        
+                    file1.writelines(str(world.player.get_transform()))
+                    file1.writelines('\n')
+                    file1.close()
 
                 # vehicle controls
                 if isinstance(self._control, carla.VehicleControl):
@@ -379,12 +470,15 @@ class DualControl(object):
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
-                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
-                self._parse_vehicle_wheel()
-                self._control.reverse = self._control.gear < 0
+                self.get_vehicle_control(world,clock)
             elif isinstance(self._control, carla.WalkerControl):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
             world.player.apply_control(self._control)
+
+    def get_vehicle_control(self,world,clock):
+        self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
+        self._parse_vehicle_wheel()
+        self._control.reverse = self._control.gear < 0
 
     def _parse_vehicle_keys(self, keys, milliseconds):
         self._control.throttle = 1.0 if keys[K_UP] or keys[K_w] else 0.0
@@ -495,22 +589,20 @@ class BlendedControl(DualControl):
         self._agent = agent
         self._agent.weight = weight
         self.turnsignalontime = time.time()
-        self.lanegoal = 'None'
+        # self.lanegoal = 'None'
         
     # blend a new control into self._control
     # note that our agent only returns throttle, steer, and brake   
     def blend_controls(self,agent_control, weight):
-            # print(self._control.steer)
             self._control.throttle = self.interp(self._control.throttle, agent_control.throttle,weight)
             self._control.steer = self.interp(self._control.steer, agent_control.steer,weight)
            
             self._control.brake = self.interp(self._control.brake, agent_control.brake,weight)
+            
             if self.parking:
                 self._control.throttle = 0.
                 self._control.brake = 1.
 
-            # print(self._control.steer)
-            # print()
 
             
     # interpolate between values a and b
@@ -519,159 +611,18 @@ class BlendedControl(DualControl):
     def interp(self,a, b, weight):
         return a + (b - a) * weight
 
-    def parse_events(self, world, clock,world2 = 2):
-        """
-            Copied from parent class, modified to pass _control variables
-            through the Agent before acting on them
-        """
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return True
-            
-            # controller input
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
-                    self.parking = not self.parking
-                elif event.button == 1:
-                    world.hud.toggle_info()
-                elif event.button == 2:
-                    world.camera_manager.toggle_camera()
-                elif event.button == 3:
-                    file1 = open("myfile.txt", "a")
-                    
-                    file1.writelines(str(world.player.get_transform()))
-                    file1.writelines('\n')
-                    file1.close()
-                    world.next_weather()
-                elif event.button == 5:
-                    self.turnsignalontime = time.time()
-                    if self.hud.turn ==0:
-                        self.lanegoal = 'Right'
-                        self.hud.turn = -1
-                        self._agent.pp.pure_pursuit.update_lane_change(-1)
-                    else:
-                        self.hud.turn = 0       
-                        self._agent.pp.pure_pursuit.update_lane_change(0)               
-                elif event.button == 4:
-                    
-                    self.turnsignalontime = time.time()
+    def get_vehicle_control(self,world,clock):
+        # get manual control
+        self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
+        self._parse_vehicle_wheel()
 
-                    if self.hud.turn ==0:
-                        self.lanegoal = 'Left'
-                        self.hud.turn = 1
-                        self._agent.pp.pure_pursuit.update_lane_change(1)
-                    else:
-                        self.hud.turn = 0
-                        self._agent.pp.pure_pursuit.update_lane_change(0)
-                elif event.button == 23:
-                    
-                    self._control.gear = 1 if self._control.reverse else -1
-            
-            # keyboard input
-            elif event.type == pygame.KEYUP:
-                print(event.key)
-                #Map keypad keys to weight changes
-                if self._is_quit_shortcut(event.key):
-                    return True
-                elif event.key == 1073741913:
-                    #1 key
-                    print("Weight set to .25") #active print
-                    self._agent.weight = .25
-                elif event.key == 1073741914:
-                    #2 key
-                    print("Weight set to .5") #active print
-                    self._agent.weight = .5
-                elif event.key == 1073741915:
-                    #3 key
-                    self._agent.weight = .75
-                    print("Weight set to .75") #active print
-                elif event.key == 1073741916:
-                    #4 key
-                    print("Weight set to 1") #active print
-                    self._agent.weight = 1
-                elif event.key == 1073741922:
-                    #0 key
-                    self._agent.weight = 0
-                    print("Weight set to 0") #active print
-                elif event.key == 1073741917:
-                #5 key, lane change?
-                    try:
-                        print("Button")
-                        self._agent.pp.pure_pursuit.update_lane_change(-1)
-                    except Exception as e:
-                        print(e) #active print
-                    #5 key, spawns tree (disabled)
-                    
-                    # self._agent.weight = 0
-                    # t = world.player.get_transform()
-                    # t.location.z += 0
-                    # cone_library = world2.get_blueprint_library()
-                    # cone = cone_library.find("static.prop.fountain")
-                    # cone.set_attribute('role_name', 'tree')
-                    # this_cone = world2.spawn_actor(cone,t)
-                    # this_cone.set_enable_gravity(False) #Turn this back on
-                    # this_cone.set_simulate_physics(False)
-                    # print("Weight set to 0")
-                elif event.key == 1073741918:
-                    #6 key, lane change?
-                    try:
-                        print("Button")
-                        self._agent.pp.pure_pursuit.update_lane_change(1)
-                    except Exception as e:
-                        print(e) #active print
-                elif event.key == K_BACKSPACE:
-                    world.restart()
-                elif event.key == K_F1:
-                    world.hud.toggle_info()
-                elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
-                    world.hud.help.toggle()
-                elif event.key == K_TAB:
-                    world.camera_manager.toggle_camera()
-                elif event.key == K_c and pygame.key.get_mods() & KMOD_SHIFT:
-                    world.next_weather(reverse=True)
-                elif event.key == K_c:
-                    world.next_weather()
-                elif event.key == K_BACKQUOTE:
-                    world.camera_manager.next_sensor()
-                elif event.key > K_0 and event.key <= K_9:
-                    world.camera_manager.set_sensor(event.key - 1 - K_0)
-                elif event.key == K_r:
-                    world.camera_manager.toggle_recording()
-                if isinstance(self._control, carla.VehicleControl):
-                    if event.key == K_q:
-                        self._control.gear = 1 if self._control.reverse else -1
-                    elif event.key == K_m:
-                        self._control.manual_gear_shift = not self._control.manual_gear_shift
-                        self._control.gear = world.player.get_control().gear
-                        world.hud.notification('%s Transmission' %
-                                               ('Manual' if self._control.manual_gear_shift else 'Automatic'))
-                    elif self._control.manual_gear_shift and event.key == K_COMMA:
-                        self._control.gear = max(-1, self._control.gear - 1)
-                    elif self._control.manual_gear_shift and event.key == K_PERIOD:
-                        self._control.gear = self._control.gear + 1
-                    elif event.key == K_p:
-                        self._autopilot_enabled = not self._autopilot_enabled
-                        world.player.set_autopilot(self._autopilot_enabled)
-                        world.hud.notification('Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
+        # print(self._control.steer)
+        # This is where you would add the call to the Agent
+        agent_control = carla.VehicleControl()
+        agent_control = self._agent.act(agent_control,world)
+        self.blend_controls(agent_control, self._agent.weight)
 
-        # autopilot off
-        if not self._autopilot_enabled:
-            if isinstance(self._control, carla.VehicleControl):
-                # get manual control
-                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
-                self._parse_vehicle_wheel()
-
-                # print(self._control.steer)
-                # This is where you would add the call to the Agent
-                agent_control = carla.VehicleControl()
-                agent_control = self._agent.act(agent_control,world)
-                self.blend_controls(agent_control, self._agent.weight)
-
-                self._control.reverse = self._control.gear < 0
-            elif isinstance(self._control, carla.WalkerControl):
-                self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
-            world.player.apply_control(self._control)
+        self._control.reverse = self._control.gear < 0
 
 
 
@@ -688,10 +639,8 @@ class Agent():
         #waypoints=self.createwaypointlist()
         #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
         self.in_control = True #Comment to False if manual control also comment line 3 of act function
-        self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/waypointIDS.csv')
-        self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointRoadIDS.csv')
-        self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointLaneIDs.csv')
-        self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointDistances.csv')
+
+       
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -702,6 +651,7 @@ class Agent():
         self.road_waypoint_array = np.loadtxt("Road_Start_and_ends.txt",delimiter=" ").astype(np.int64)
         self.obj = args.obstacles
         self.over_distance = 20
+
         self.over_distance_array = list(args.trial_type)
         
         self.over_distance_array = list(map(lambda x: 10 if (x == 'A' or x=='B' or x=='E' or x=='F') else x, self.over_distance_array))
@@ -714,8 +664,7 @@ class Agent():
         self.weight_array = list(map(lambda x: .75 if (x == 'B' or x=='D') else x, self.weight_array))
         self.weight_array = list(map(lambda x: 0 if (x == 'E') else x, self.weight_array))
         self.weight_array = list(map(lambda x: 1 if (x == 'F') else x, self.weight_array))
-        # print(self.weight_array)
-
+        
         self.weight = 0
         return
     
@@ -861,72 +810,17 @@ class Agent():
         
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
-        # print(mat)
-        # waypoints = self.waypoints2locations(wps)
+        
         waypoints = locations
-        # if nwp.road_id == 1959:
-        #     print(nwp.is_junction)
-        #print("="*40)
-        #print("="*40)
-        #print(waypoints)
-        #print("="*40)
-        #print(mat)
+        
         body_waypoints = np.zeros(shape=(len(waypoints),2))
         # Turn into 2d coords in car frame
         for i in range(len(waypoints)):
             waypoints[i] = mat@waypoints[i]
             temp = waypoints[i]/waypoints[i,3]
             body_waypoints[i] = temp[:2]
-        #print("="*40)
-        #print(waypoints)
-        #print("="*40)
-        #print("="*40)
-        # if temp_var:
-        #     print(body_waypoints)
-        return body_waypoints
-    
-    def waypointfileProcessorint(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=int(column_data[i][0])
-        return column_data
-    
-    def waypointfileProcessorfloat(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=float(column_data[i][0])
-        return column_data
-    
-    def waypoints2locations(self,waypoints):
-        locations = np.zeros(shape=(len(waypoints),4))
-        for i in range(len(waypoints)):
-            carla_loc = waypoints[i].transform.location
-            loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
-            loc_3 = [carla_loc.x,carla_loc.y,carla_loc.z]
-            loc_2 = [carla_loc.x,carla_loc.y]
-            locations[i,:] = np.array(loc_4)
-        return locations
         
-    def createwaypointlist(self):
-        waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/waypointIDS.csv')
-        waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointRoadIDS.csv')
-        waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointLaneIDs.csv')
-        waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointDistances.csv')
-        waypoints=[]
-        for i in range(len(waypointids)):
-            wps=map.get_waypoint_xodr(waypointroadids[i],waypointlaneids[i],waypointdistances[i])
-            waypoints.append(wps)
-        return waypoints
+        return body_waypoints
     
     
 
@@ -979,8 +873,8 @@ class HUD(object):
         v = world.player.get_velocity()
         c = world.player.get_control()
 
-        w27 = world.world.get_map().get_waypoint(world.player.get_location(),project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
-        
+        w27 = world.world.get_map().get_waypoint(t.location,project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+
         if str(w27.right_lane_marking.type) == 'Solid':
             self.lane = 'Right'
             self.score+=1/200*self.speed_kmh/(1.6*40)
@@ -999,6 +893,7 @@ class HUD(object):
         heading += 'S' if abs(t.rotation.yaw) > 90.5 else ''
         heading += 'E' if 179.5 > t.rotation.yaw > 0.5 else ''
         heading += 'W' if -0.5 > t.rotation.yaw > -179.5 else ''
+
         colhist = world.collision_sensor.get_collision_history()
         collision = [colhist[x + self.frame - 200] for x in range(0, 200)]
         max_col = max(1.0, max(collision))
@@ -1050,7 +945,7 @@ class HUD(object):
                     break
                 vehicle_type = get_actor_display_name(vehicle, truncate=22)
                 self._info_text.append('% 4dm %s' % (d, vehicle_type))
-        # Max -- Getting autodrive from the blended controller
+        # Maeve -- Getting autodrive from the blended controller
         if self.controller is not None:
             try:
                 self.autodrive = self.controller._agent.in_control
@@ -1105,7 +1000,7 @@ class HUD(object):
                     surface = self._font_mono.render(item, True, (255, 255, 255))
                     display.blit(surface, (8, v_offset))
                 v_offset += 18
-        ## BEGIN MAX_ADDED_BIT
+        ## BEGIN Maeve_ADDED_BIT
         # This bit makes the box on the screen that handles the speedometer 
         # and autodrive warning
         speed_size = [200,100]
@@ -1132,9 +1027,6 @@ class HUD(object):
         #auto_drive = self._font_speed.render("AutoDrive {}abled".format(autodrive_output[self.autodrive]),True,(255,255,255))
         speedometer_loc[1] += speed_size[1]//2
         if self.turn == -1:
-            # pygame.draw.polygon(speedometer, (0, 0, 0), ((0, 10), (0, 20), (200, 200), (20, 30), (30, 15), (20, 0), (200, 10)))
-
-
             turnsignal_left = self._font_speed.render("<--", True, (255, 255, 255))
             display.blit(turnsignal_left, signal_loc)
         if self.turn == 1:
@@ -1145,7 +1037,7 @@ class HUD(object):
         
 
         #display.blit(auto_drive,speedometer_loc)
-        ## END MAX_ADDED_BIT
+        ## END Maeve_ADDED_BIT
         self._notifications.render(display)
         self.help.render(display) #uncomment for HUD
 
@@ -1414,7 +1306,7 @@ class CameraManager(object):
             image.save_to_disk('_out/%08d' % image.frame)
 #Lap Tracking
 class Lapping():
-    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,worldobject,worldcarla,simtime,agent):
+    def __init__(self,worldobject,worldcarla,simtime,agent):
         """A function to intialize an Obstacles spawing object
         
         Given: 
@@ -1424,9 +1316,7 @@ class Lapping():
         worldobject: The world as the object class defined in this file
         worldcarla: The carla world object
         """
-        self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
-        self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
-        self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
+        
         self.worldobject=worldobject
         self.obstacles_present = worldobject.obstacles_present
         self.worldcarla=worldcarla
@@ -1497,8 +1387,10 @@ class Lapping():
                 
                 
             if self.obstacles_present:
-                CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
-                
+                # CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
+                remove_CONE(self.worldcarla, "cone_bob")
+                spawn_CONE(self.world, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap"+str(self.lapcount)+".txt" )
+
                 
 
             self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
@@ -1537,7 +1429,7 @@ def game_loop(args):
         agent = Agent(args)
         controller = BlendedControl(world,agent,args.weight)
         hud.add_controller(controller)
-        lap=Lapping('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsS.csv',world,client.get_world(),hud.simulation_time,agent)
+        lap=Lapping(world,client.get_world(),hud.simulation_time,agent)
         lap.simulation_file()
         clock = pygame.time.Clock()
         interval=1000
