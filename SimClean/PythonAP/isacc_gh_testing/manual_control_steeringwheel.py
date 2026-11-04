@@ -125,6 +125,7 @@ except ImportError:
 # ==============================================================================
 
 from cone4 import spawn_CONE, remove_CONE
+import map_config
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -230,6 +231,7 @@ class World(object):
         self.player.get_world().set_weather(preset[0])
 
     def tick(self, clock):
+        # print("World Tick")
         self.hud.tick(self, clock)
 
     def render(self, display):
@@ -636,6 +638,7 @@ class Agent():
     def __init__(self,args):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID() #Uncomment for PID
+        
         #waypoints=self.createwaypointlist()
         #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
         self.in_control = True #Comment to False if manual control also comment line 3 of act function
@@ -851,7 +854,7 @@ class HUD(object):
         self._info_text = []
         self._server_clock = pygame.time.Clock()
         # print(self._server_clock) #nonactive print
-        # Max additions for auto-drive id
+        # Maeve additions for auto-drive id
         self.controller = None
         self.autodrive = True
         self.turn = 0
@@ -866,6 +869,7 @@ class HUD(object):
         self.simulation_time = timestamp.elapsed_seconds
 
     def tick(self, world, clock):
+        # print("HUD tick")
         self._notifications.tick(world, clock)
         if not self._show_info:
             return
@@ -1325,7 +1329,9 @@ class Lapping():
         self.map=self.worldcarla.get_map()
         self.simtime=simtime
         self.agent=agent
-        self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
+        print("Prespawn")
+        self.vehicle_spawn=self.map.get_waypoint_xodr(map_config.vehicle_spawn_roadid,map_config.vehicle_spawn_laneid,map_config.vehicle_spawn_S)
+        print("Spawn")
         self.spawn_index = -5  
         #self.reset(object_type, spawn_index)     
         
@@ -1389,7 +1395,7 @@ class Lapping():
             if self.obstacles_present:
                 # CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
                 remove_CONE(self.worldcarla, "cone_bob")
-                spawn_CONE(self.world, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap"+str(self.lapcount)+".txt" )
+                spawn_CONE(self.worldcarla, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap"+str(self.lapcount)+".txt" )
 
                 
 
@@ -1426,22 +1432,31 @@ def game_loop(args):
 
         world.camera_manager.toggle_camera()
 
+        # print("Created World, check")
+
         agent = Agent(args)
+        # print("Agent, check")
         controller = BlendedControl(world,agent,args.weight)
+        # print("Controller, check")
         hud.add_controller(controller)
+        # print("Controller hud, ")
         lap=Lapping(world,client.get_world(),hud.simulation_time,agent)
+        # print("Lap")
         lap.simulation_file()
+        # print("Lap sim file, check")/
         clock = pygame.time.Clock()
         interval=1000
         elapsed=0
         timer=False
         while True:
+            # print("Loop start")/
             dt = clock.tick_busy_loop(60)
            
-            if controller.parse_events(world, clock, client.get_world()):
+            if controller.parse_events(world, clock):
                 return
             if lap.timer(hud.simulation_time):
                 lap.simulation_file()
+            # print("World.tick")
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
@@ -1526,7 +1541,7 @@ def main():
     
 
     try:
-
+        print("Start Game Loop, check")
         game_loop(args)
 
     except KeyboardInterrupt:
