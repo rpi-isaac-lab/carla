@@ -107,6 +107,11 @@ try:
     from pygame.locals import K_r
     from pygame.locals import K_s
     from pygame.locals import K_w
+
+    from pygame.locals import K_DOWN
+    from pygame.locals import K_UP
+    from pygame.locals import K_LEFT
+    from pygame.locals import K_RIGHT
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
@@ -119,10 +124,8 @@ except ImportError:
 # -- wheel go brrr -------------------------------------------------------------
 # ==============================================================================
 
-# Not pretty, but functional
-import test_ff
-from cone3 import CONE
-
+from cone4 import spawn_CONE, remove_CONE
+import map_config
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -147,22 +150,37 @@ def get_actor_display_name(actor, truncate=250):
 
 
 class World(object):
-    def __init__(self, carla_world, hud, actor_filter, args):
+    def __init__(self, carla_world, hud, agent,actor_filter, args):
         self.world = carla_world
         self.hud = hud
         self.player = None
+        self.agent = agent
+
+        self.map=self.world.get_map()
+
         self.collision_sensor = None
         self.lane_invasion_sensor = None
         self.gnss_sensor = None
+
         self.camera_manager = None
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
+        
         self.obstacles = args.obstacles
+        self.obstacles_present = args.obstacles_present
+
+        self.vehicle_spawn=self.map.get_waypoint_xodr(map_config.vehicle_spawn_roadid,map_config.vehicle_spawn_laneid,map_config.vehicle_spawn_S)
+        self.lap_start=self.map.get_waypoint_xodr(map_config.lap_start_roadid,map_config.lap_start_laneid,map_config.lap_start_S)
+        self.vehicle_spawn_transform = self.vehicle_spawn.transform
+        self.vehicle_spawn_transform.location.z +=2
+        self.vehicle_spawn_transform.rotation.yaw =0
+        
         self._actor_filter = actor_filter
         # print("init()")
         self.restart()
         self.world.on_tick(hud.on_world_tick)
         self.make_nice_weather()
+
 
     def restart(self):
         # Keep same camera config if the camera manager exists.
@@ -172,16 +190,14 @@ class World(object):
         #blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
         # Get a Lincoln Mkz 2020
         blueprint = self.world.get_blueprint_library().find("vehicle.lincoln.mkz_2020")
-        blueprint = self.world.get_blueprint_library().find("vehicle.gazelle.omafiets") #Uncomment for bicycle
+        # blueprint = self.world.get_blueprint_library().find("vehicle.gazelle.omafiets") #Uncomment for bicycle
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
             blueprint.set_attribute('color', "196,30,58")
         # Spawn the player.
-        # print("Player is", self.player)
-        # print(self.player is not None)
         if self.player is not None:
-            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=5), carla.Rotation(yaw=0))
+            
             """
             spawn_point = self.player.get_transform()
             spawn_point.location.z += 2.0
@@ -189,7 +205,7 @@ class World(object):
             spawn_point.rotation.pitch = 0.0
             """
             self.destroy()
-            self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            self.player = self.world.try_spawn_actor(blueprint, self.vehicle_spawn_transform)
             
         while self.player is None:
             """
@@ -197,12 +213,14 @@ class World(object):
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             """
-            spawn_point = carla.Transform(carla.Location(x=-49.1, y=-194.5, z=5), carla.Rotation(yaw=0))
+            
             blueprint_library = self.world.get_blueprint_library()
-            self.player = self.world.try_spawn_actor(blueprint, spawn_point)
+            self.player = self.world.try_spawn_actor(blueprint, self.vehicle_spawn_transform)
 
-        if self.obstacles:
-            CONE(self.world,"static.prop.trafficcone01",1)
+        if self.obstacles_present:
+            spawn_CONE(self.world, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap0.txt" )
+
+        spawn_CONE(self.world, "static.prop.streetbarrier", "barrier_barry", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/myfile.txt" )
         
 
         # Set up the sensors.
@@ -215,6 +233,11 @@ class World(object):
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
 
+        self.lapcount=0
+        self.simtime = self.hud.simulation_time
+        self.simulation_file()
+        
+
     def next_weather(self, reverse=False):
         self._weather_index += -1 if reverse else 1
         self._weather_index %= len(self._weather_presets)
@@ -223,7 +246,11 @@ class World(object):
         self.player.get_world().set_weather(preset[0])
 
     def tick(self, clock):
+        # print("World Tick")
         self.hud.tick(self, clock)
+        if self.hud.simulation_time-self.simtime>1:#Change to change the time between checks of being within the start zone
+            self.simtime=self.hud.simulation_time
+            self.simulation_file()
 
     def render(self, display):
         self.camera_manager.render(display)
@@ -256,6 +283,41 @@ class World(object):
         if self.player is not None:
             self.player.destroy()
 
+    def simulation_file(self):
+        current_pos = self.player.get_location()
+        if current_pos.distance(self.lap_start.transform.location) < 10.0:
+            self.lapcount += 1
+            self.agent.current_segment = 0
+
+            #Trial Specific Get over distance and shared autonomy weights
+            self.agent.over_distance = self.agent.over_distance_array[(self.lapcount-1)%4]
+            self.agent.weight = self.agent.weight_array[(self.lapcount-1)%4]
+            print(self.agent.weight)
+            
+            print('Lap ' + str(self.lapcount)) #active print
+            if self.lapcount > 4:
+                print("Simulation over, please hit CTRL+C on the terminal to exit the vehicle.")
+            
+                # #TREETREE
+                t = self.player.get_transform()
+                
+                cone_library = self.world.get_blueprint_library()
+                cone = cone_library.find("static.prop.fountain")
+                cone.set_attribute('role_name', 'tree')
+                this_cone = self.world.spawn_actor(cone,t)
+                this_cone.set_enable_gravity(False) #Turn this back on
+                this_cone.set_simulate_physics(False)
+                
+                
+            if self.obstacles_present:
+                # CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
+                remove_CONE(self.world, "cone_bob")
+                spawn_CONE(self.world, "static.prop.trafficcone01", "cone_bob", "/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ConeLap"+str(self.lapcount)+".txt" )
+
+                
+
+            self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
+
 # ==============================================================================
 # -- DualControl -----------------------------------------------------------
 # ==============================================================================
@@ -276,7 +338,7 @@ class DualControl(object):
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
-
+        self.hud = world.hud
         # initialize steering wheel
         pygame.joystick.init()
 
@@ -297,7 +359,9 @@ class DualControl(object):
         self._reverse_idx = int(self._parser.get('G29 Racing Wheel', 'reverse'))
         self._handbrake_idx = int(
             self._parser.get('G29 Racing Wheel', 'handbrake'))
+        self.lane_change_status = False
         
+        self.parking = False
         # actor_list = world.get_actors()
         # for id in actor_list:
         #     try:
@@ -316,26 +380,108 @@ class DualControl(object):
 
             # controller input
             elif event.type == pygame.JOYBUTTONDOWN:
+
+                #Parking
                 if event.button == 0:
-                    world.restart()
+                    self.parking = not self.parking
+
+                #Toggle HUD
                 elif event.button == 1:
                     world.hud.toggle_info()
+
+                #Toggle Camera View
                 elif event.button == 2:
                     world.camera_manager.toggle_camera()
+
+                #Change Weather
                 elif event.button == 3:
                     world.next_weather()
-                elif event.button == self._reverse_idx:
-                    self._control.gear = 1 if self._control.reverse else -1
+
+                #Left Lane Change
+                elif event.button == 5:
+                    self.turnsignalontime = time.time()
+                    if self.hud.turn ==0:
+                        # self.lanegoal = 'Left'
+                        self.hud.turn = -1
+                        self._agent.pp.pure_pursuit.update_lane_change(-1)
+                    else:
+                        self.hud.turn = 0       
+                        self._agent.pp.pure_pursuit.update_lane_change(0)               
+
+                #Right Lane Change
+                elif event.button == 4:
+                    
+                    self.turnsignalontime = time.time()
+
+                    if self.hud.turn ==0:
+                        # self.lanegoal = 'Right'
+                        self.hud.turn = 1
+                        self._agent.pp.pure_pursuit.update_lane_change(1)
+                    else:
+                        self.hud.turn = 0
+                        self._agent.pp.pure_pursuit.update_lane_change(0)
+
+                #Toggle Reverse
                 elif event.button == 23:
-                    world.camera_manager.next_sensor()
+                    self._control.gear = 1 if self._control.reverse else -1
+            
             
             # keyboard input
             elif event.type == pygame.KEYUP:
                 
                 if self._is_quit_shortcut(event.key):
                     return True
+
+                #Keypad
+                elif event.key == 1073741913:
+                    #1 key
+                    print("Weight set to .25") #active print
+                    self._agent.weight = .25
+                elif event.key == 1073741914:
+                    #2 key
+                    print("Weight set to .5") #active print
+                    self._agent.weight = .5
+                elif event.key == 1073741915:
+                    #3 key
+                    self._agent.weight = .75
+                    print("Weight set to .75") #active print
+                elif event.key == 1073741916:
+                    #4 key
+                    print("Weight set to 1") #active print
+                    self._agent.weight = 1
+                elif event.key == 1073741922:
+                    #0 key
+                    self._agent.weight = 0
+                    print("Weight set to 0") #active print
+                elif event.key == 1073741917:
+                #5 key, lane change?
+                    try:
+                        self._agent.pp.pure_pursuit.update_lane_change(-1)
+                    except Exception as e:
+                        print(e) #active print
+                elif event.key == 1073741918:
+                    #6 key, lane change?
+                    try:
+                        self._agent.pp.pure_pursuit.update_lane_change(1)
+                    except Exception as e:
+                        print(e) #active print
+                elif event.key == 1073741919:
+                    #7 Key - spawns tree disabled
+                    print("Tree Disabled")
+                    # t = world.player.get_transform()
+                    # t.location.z += 0
+                    # cone_library = world2.get_blueprint_library()
+                    # cone = cone_library.find("static.prop.fountain")
+                    # cone.set_attribute('role_name', 'tree')
+                    # this_cone = world2.spawn_actor(cone,t)
+                    # this_cone.set_enable_gravity(False) #Turn this back on
+                    # this_cone.set_simulate_physics(False)
+
+
+                        
                 elif event.key == K_BACKSPACE:
-                    world.restart()
+                    print("Restart Distabled")
+                    # world.restart()
                 elif event.key == K_F1:
                     world.hud.toggle_info()
                 elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
@@ -352,6 +498,12 @@ class DualControl(object):
                     world.camera_manager.set_sensor(event.key - 1 - K_0)
                 elif event.key == K_r:
                     world.camera_manager.toggle_recording()
+                elif event.key == K_s:
+                    file1 = open("myfile.txt", "a")
+                                        
+                    file1.writelines(str(world.player.get_transform()))
+                    file1.writelines('\n')
+                    file1.close()
 
                 # vehicle controls
                 if isinstance(self._control, carla.VehicleControl):
@@ -373,12 +525,15 @@ class DualControl(object):
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
-                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
-                self._parse_vehicle_wheel()
-                self._control.reverse = self._control.gear < 0
+                self.get_vehicle_control(world,clock)
             elif isinstance(self._control, carla.WalkerControl):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
             world.player.apply_control(self._control)
+
+    def get_vehicle_control(self,world,clock):
+        self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
+        self._parse_vehicle_wheel()
+        self._control.reverse = self._control.gear < 0
 
     def _parse_vehicle_keys(self, keys, milliseconds):
         self._control.throttle = 1.0 if keys[K_UP] or keys[K_w] else 0.0
@@ -422,12 +577,28 @@ class DualControl(object):
 
         brakeCmd = 1.6 + (2.05 * math.log10(
             -0.7 * jsInputs[self._brake_idx] + 1.4) - 1.2) / 0.92
+        
         if brakeCmd <= 0:
             brakeCmd = 0
         elif brakeCmd > 1:
             brakeCmd = 1
 
         self._control.steer = steerCmd
+        
+        # if (steerCmd) > .1:
+        #     if not self.lane_change_status:
+        #         #self._agent.pp.pure_pursuit.update_lane_change(1)
+        #         #self.lane_change_status = True
+        #         print("Steer input recieved. not changing lanes")
+        # elif steerCmd < -.1:
+        #     if not self.lane_change_status:
+        #         #self._agent.pp.pure_pursuit.update_lane_change(-1)
+
+        #         print("Steer input recieved, not changing lanes")
+        #         #self.lane_change_status = True
+        # elif -.1 < steerCmd < .1 and self.lane_change_status:
+        #     self.lane_change_status = False
+            
         # print(self._control.steer,"412")
 
         self._control.brake = brakeCmd
@@ -435,7 +606,7 @@ class DualControl(object):
 
         #toggle = jsButtons[self._reverse_idx]
 
-        self._control.hand_brake = bool(jsButtons[self._handbrake_idx])
+        self._control.hand_brake = 0 #bool(jsButtons[self._handbrake_idx])
 
     def _parse_walker_keys(self, keys, milliseconds):
         self._control.speed = 0.0
@@ -471,17 +642,22 @@ class BlendedControl(DualControl):
         """
         super().__init__(world,False)
         self._agent = agent
-        self.weight = weight
+        self._agent.weight = weight
+        self.turnsignalontime = time.time()
+        # self.lanegoal = 'None'
         
     # blend a new control into self._control
     # note that our agent only returns throttle, steer, and brake   
     def blend_controls(self,agent_control, weight):
-            # print(self._control.steer)
             self._control.throttle = self.interp(self._control.throttle, agent_control.throttle,weight)
             self._control.steer = self.interp(self._control.steer, agent_control.steer,weight)
+           
             self._control.brake = self.interp(self._control.brake, agent_control.brake,weight)
-            # print(self._control.steer)
-            # print()
+            
+            if self.parking:
+                self._control.throttle = 0.
+                self._control.brake = 1.
+
 
             
     # interpolate between values a and b
@@ -490,138 +666,18 @@ class BlendedControl(DualControl):
     def interp(self,a, b, weight):
         return a + (b - a) * weight
 
-    def parse_events(self, world, clock,world2 = 2):
-        """
-            Copied from parent class, modified to pass _control variables
-            through the Agent before acting on them
-        """
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return True
-            # controller input
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
-                    print("Line 477") #active print
-                    # world.restart()
-                elif event.button == 1:
-                    world.hud.toggle_info()
-                elif event.button == 2:
-                    world.camera_manager.toggle_camera()
-                elif event.button == 3:
-                    world.next_weather()
-                elif event.button == self._reverse_idx:
-                    self._control.gear = 1 if self._control.reverse else -1
-                elif event.button == 23:
-                    world.camera_manager.next_sensor()
-            
-            # keyboard input
-            elif event.type == pygame.KEYUP:
-                # print(event)
-                #Map keypad keys to weight changes
-                if self._is_quit_shortcut(event.key):
-                    return True
-                elif event.key == 1073741913:
-                    #1 key
-                    print("Weight set to .25") #active print
-                    self.weight = .25
-                elif event.key == 1073741914:
-                    #2 key
-                    print("Weight set to .5") #active print
-                    self.weight = .5
-                elif event.key == 1073741915:
-                    #3 key
-                    self.weight = .75
-                    print("Weight set to .75") #active print
-                elif event.key == 1073741916:
-                    #4 key
-                    print("Weight set to 1") #active print
-                    self.weight = 1
-                elif event.key == 1073741922:
-                    #0 key
-                    self.weight = 0
-                    print("Weight set to 0") #active print
-                elif event.key == 1073741917:
-                    spawn_point = carla.Transform(carla.Location(x=162.4, y=192.7, z=5), carla.Rotation(yaw=180))
-                    actor_list = world2.get_actors()
+    def get_vehicle_control(self,world,clock):
+        # get manual control
+        self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
+        self._parse_vehicle_wheel()
 
-                    for id in actor_list:
-                        
-                        try:
-                            if id.attributes["role_name"] == "hero":
-                                print("player identified")
-                                id.set_transform(spawn_point)
-                        except:
-                            continue
-                    #5 key, spawns tree (disabled)
-                    
-                    # self.weight = 0
-                    # t = world.player.get_transform()
-                    # t.location.z += 0
-                    # cone_library = world2.get_blueprint_library()
-                    # cone = cone_library.find("static.prop.fountain")
-                    # cone.set_attribute('role_name', 'tree')
-                    # this_cone = world2.spawn_actor(cone,t)
-                    # this_cone.set_enable_gravity(False) #Turn this back on
-                    # this_cone.set_simulate_physics(False)
-                    # print("Weight set to 0")
-                elif event.key == 1073741918:
-                    #6 key, lane change?
-                    try:
-                        self._agent.pp.pure_pursuit.update_lane_change()
-                    except Exception as e:
-                        print(e) #active print
-                elif event.key == K_BACKSPACE:
-                    world.restart()
-                elif event.key == K_F1:
-                    world.hud.toggle_info()
-                elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
-                    world.hud.help.toggle()
-                elif event.key == K_TAB:
-                    world.camera_manager.toggle_camera()
-                elif event.key == K_c and pygame.key.get_mods() & KMOD_SHIFT:
-                    world.next_weather(reverse=True)
-                elif event.key == K_c:
-                    world.next_weather()
-                elif event.key == K_BACKQUOTE:
-                    world.camera_manager.next_sensor()
-                elif event.key > K_0 and event.key <= K_9:
-                    world.camera_manager.set_sensor(event.key - 1 - K_0)
-                elif event.key == K_r:
-                    world.camera_manager.toggle_recording()
-                if isinstance(self._control, carla.VehicleControl):
-                    if event.key == K_q:
-                        self._control.gear = 1 if self._control.reverse else -1
-                    elif event.key == K_m:
-                        self._control.manual_gear_shift = not self._control.manual_gear_shift
-                        self._control.gear = world.player.get_control().gear
-                        world.hud.notification('%s Transmission' %
-                                               ('Manual' if self._control.manual_gear_shift else 'Automatic'))
-                    elif self._control.manual_gear_shift and event.key == K_COMMA:
-                        self._control.gear = max(-1, self._control.gear - 1)
-                    elif self._control.manual_gear_shift and event.key == K_PERIOD:
-                        self._control.gear = self._control.gear + 1
-                    elif event.key == K_p:
-                        self._autopilot_enabled = not self._autopilot_enabled
-                        world.player.set_autopilot(self._autopilot_enabled)
-                        world.hud.notification('Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
+        # print(self._control.steer)
+        # This is where you would add the call to the Agent
+        agent_control = carla.VehicleControl()
+        agent_control = self._agent.act(agent_control,world)
+        self.blend_controls(agent_control, self._agent.weight)
 
-        # autopilot off
-        if not self._autopilot_enabled:
-            if isinstance(self._control, carla.VehicleControl):
-                # get manual control
-                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
-                self._parse_vehicle_wheel()
-
-                # print(self._control.steer)
-                # This is where you would add the call to the Agent
-                agent_control = carla.VehicleControl()
-                agent_control = self._agent.act(agent_control,world)
-                self.blend_controls(agent_control, self.weight)
-
-                self._control.reverse = self._control.gear < 0
-            elif isinstance(self._control, carla.WalkerControl):
-                self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time())
-            world.player.apply_control(self._control)
+        self._control.reverse = self._control.gear < 0
 
 
 
@@ -635,13 +691,12 @@ class Agent():
     def __init__(self,args):
         #self.speed_limit = 70
         self.pp = PurePursuitPlusPID() #Uncomment for PID
+        
         #waypoints=self.createwaypointlist()
         #self.pp=pursuitplusMPC(waypoints) #Uncomment for MPC
         self.in_control = True #Comment to False if manual control also comment line 3 of act function
-        self.waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/waypointIDS.csv')
-        self.waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointRoadIDS.csv')
-        self.waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointLaneIDs.csv')
-        self.waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointDistances.csv')
+
+       
         self.desired_speed = 20 # meters/second
         self.cornering_speed_mult = 5
         self.prev_time = time.time()
@@ -650,7 +705,29 @@ class Agent():
         self.prev_road_id = 2
 
         self.road_waypoint_array = np.loadtxt("Road_Start_and_ends.txt",delimiter=" ").astype(np.int64)
+        self.route = np.loadtxt("/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/route.csv",float,delimiter=",")
         self.obj = args.obstacles
+        self.over_distance = 20
+
+        self.over_distance_array = list(args.trial_type)
+        
+        self.over_distance_array = list(map(lambda x: 10 if (x == 'A' or x=='B' or x=='E' or x=='F') else x, self.over_distance_array))
+        self.over_distance_array = list(map(lambda x: 20 if (x == 'C' or x=='D') else x, self.over_distance_array))
+        # print(self.over_distance_array)
+        
+        self.weight_array = list(args.trial_type)
+        
+        self.weight_array = list(map(lambda x: .25 if (x == 'A' or x=='C') else x, self.weight_array))
+        self.weight_array = list(map(lambda x: .75 if (x == 'B' or x=='D') else x, self.weight_array))
+        self.weight_array = list(map(lambda x: 0 if (x == 'E') else x, self.weight_array))
+        self.weight_array = list(map(lambda x: 1 if (x == 'F') else x, self.weight_array))
+        
+        self.weight = 0
+
+        self.lap_count = 0
+
+
+        self.current_route_segment = 72
         return
     
     def act(self,controls,world):
@@ -688,7 +765,7 @@ class Agent():
         current_time = time.time()
         delta_t = current_time-self.prev_time
         waypoints = self.find_waypoints(world.player,map,inclusive=10)
-        a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,self.obj,cornering_mult=self.cornering_speed_mult)
+        a, steer = self.pp.get_control(waypoints,speed_mps,self.desired_speed,delta_t,self.obj,self.over_distance,cornering_mult=self.cornering_speed_mult)
         # update the prev_time
         self.prev_time = current_time
         if steer is not None:
@@ -703,192 +780,86 @@ class Agent():
         # If inclusive is not None, waypoints must be in list inclusive
         #This is currently creating a lot of lag, needs 200 waypoints to increase chances of finding one in the list already, but the searching is slow, could use improvement
         nwp = map.get_waypoint(vehicle.get_location(),project_to_road=True,lane_type=(carla.LaneType.Driving)) # Nearest waypoint to vehicle
+
         waypoints = [nwp]
-        index=-1
-        temp_var = False
+
+        #Check if current route segment is a road
+        if nwp.road_id == int(self.route[self.current_route_segment,0]) and nwp.lane_id == int(self.route[self.current_route_segment,1]):
+            
+            #number of waypoints to grab, direction of trafic != pos s
+            np.abs(nwp.s-self.route[self.current_route_segment,2])/(max_dist/number)
+            if nwp.s<self.route[self.current_route_segment,2]:
+                wps = nwp.next_until_lane_end(max_dist/number)
+            else:
+                wps = nwp.previous_until_lane_start(max_dist/number)
+            
+            try:
+                waypoints += wps[:int(np.abs(nwp.s-self.route[self.current_route_segment,2])/(max_dist/number))]
+            except:
+                waypoints+=wps
+                print("Flag",np.abs(nwp.s-self.route[self.current_route_segment,2])/(max_dist/number))
+        print(wps[0].s,nwp.s)
         locations = np.zeros(shape=(number,4))
         locations[:,3] = 1
-        # print(nwp.is_junction)
-        if nwp.is_junction and nwp.road_id != 1959:
-            if self.prev_road_id in [4,3,2,1]:
-                next_road = self.prev_road_id -1
-                prev_road_loc_index = 1
-                next_road_loc_index = 4
-            elif self.prev_road_id in [65,66,67,68]:
-                next_road = self.prev_road_id +1
-                prev_road_loc_index = 4
-                next_road_loc_index = 1
-            elif self.prev_road_id == 0:
-                next_road = 65
-                prev_road_loc_index = 1
-                next_road_loc_index = 1
-            elif self.prev_road_id == 69:
-                next_road = 4
-                next_road_loc_index = 4
-                prev_road_loc_index = 4
-            else:
-                print("Logic Error line 717") #active print
-            next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
-            prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
-            locations[:,0]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index],self.road_waypoint_array[next_road_index,next_road_loc_index],number)+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
+        for i in range(min(len(waypoints),number)):
+            waypoint_next = waypoints[i]
+            carla_loc = waypoint_next.transform.location
+            loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
+            locations[i,:] = np.array(loc_4)
+        i=i+1
 
-            locations[:,1]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+1],self.road_waypoint_array[next_road_index,next_road_loc_index+1],number)+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
-            locations[:,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number)+nwp.transform.location.z
-        else:
-            if nwp.road_id in [0,1,2,3,4,65,66,67,68,69] and self.prev_road_id != nwp.road_id:
-                self.prev_road_id = nwp.road_id
-
-            wps = nwp.next_until_lane_end(max_dist/number)
-            
-            if len(wps) < number:
-                for i in range(len(wps)):
-                    waypoint_next = wps[i]
+        route_index = self.current_route_segment
+        route_index = (route_index+1)%self.route.shape[0]
+        while i < number:
+            nwp = map.get_waypoint_xodr(int(self.route[route_index-1,0]),int(self.route[route_index-1,1]),self.route[route_index-1,0])
+            if int(self.route[route_index-1,0]) == int(self.route[route_index,0]) and int(self.route[route_index-1,1]) == int(self.route[route_index,1]):
+                if self.route[route_index,2] < self.route[route_index-1,2]:
+                    waypoints = nwp.previous_until_lane_start(max_dist/number)
+                else:
+                    waypoints = nwp.next_until_lane_end(max_dist/number)
+                for j in range(min(len(waypoints),number-i)):
+                    waypoint_next = waypoints[j]
                     carla_loc = waypoint_next.transform.location
                     loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
-                    locations[i,:] = np.array(loc_4)
-                if self.prev_road_id in [4,3,2,1]:
-                    next_road = self.prev_road_id -1
-                    prev_road_loc_index = 1
-                    next_road_loc_index = 4
-                elif self.prev_road_id in [65,66,67,68]:
-                    next_road = self.prev_road_id +1
-                    prev_road_loc_index = 4
-                    next_road_loc_index = 1
-                elif self.prev_road_id == 0:
-                    next_road = 65
-                    prev_road_loc_index = 1
-                    next_road_loc_index = 1
-                elif self.prev_road_id == 69:
-                    next_road = 4
-                    next_road_loc_index = 4
-                    prev_road_loc_index = 4
-                else:
-                    print("Logic Error line 753") #active print
-                if nwp.road_id != 68:
-                    next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
-                    prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
-                    locations[len(wps):,0]=np.linspace(carla_loc.x,self.road_waypoint_array[next_road_index,next_road_loc_index],number-len(wps))+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
-
-                    locations[len(wps):,1]=np.linspace(carla_loc.y,self.road_waypoint_array[next_road_index,next_road_loc_index+1],number-len(wps))+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
-                    locations[len(wps):,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number-len(wps))+nwp.transform.location.z
-                else:
-                    next_road_index = np.where(self.road_waypoint_array[:,0]==next_road)[0][0]
-                    prev_road_index = np.where(self.road_waypoint_array[:,0]==self.prev_road_id)[0][0]
-                    locations[len(wps):,0]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index],self.road_waypoint_array[next_road_index,next_road_loc_index],number-len(wps))+nwp.transform.location.x-self.road_waypoint_array[prev_road_index,prev_road_loc_index]
-
-                    locations[len(wps):,1]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+1],self.road_waypoint_array[next_road_index,next_road_loc_index+1],number-len(wps))+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
-                    
-                    locations[len(wps):,2]=np.linspace(self.road_waypoint_array[prev_road_index,prev_road_loc_index+2],self.road_waypoint_array[next_road_index,next_road_loc_index+2],number-len(wps))+nwp.transform.location.z
-
-                    locations[len(wps):,1]=self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]*np.ones(number-len(wps))+nwp.transform.location.y-self.road_waypoint_array[prev_road_index,prev_road_loc_index+1]
+                    locations[i+j,:] = np.array(loc_4)
                 
             else:
-                for i in range(number):
-                    waypoint_next = wps[i]
-                    carla_loc = waypoint_next.transform.location
-                    loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
-                    locations[i,:] = np.array(loc_4)
-        # if nwp.road_id == 1959:
-        #     print(locations)
-        # for i in range(number):
-        #     wps = nwp.next(((i+1)/number)*max_dist)
-        #     if len(wps) > 0:
-        #         if wps[0].is_junction:
-        #             if wps[0].junction_id==498: #Hardcoding a troublemaker
-        #                 for i in range(len(wps)):
-        #                     if wps[i].road_id==499 and wps[i].lane_id==1:
-        #                         waypoints.append(wps[i])
-        #                         break
-        #                     elif wps[i].road_id==551 and wps[i].lane_id==1:
-        #                         waypoints.append(wps[i])
-        #                         break
-        #             elif wps[0].junction_id==861: #Hardcoding a troublemaker
-        #                 # print("flag")
-        #                 temp_var = True
-        #                 for i in range(len(wps)):
-        #                     if wps[i].road_id==874 and wps[i].lane_id==3:
-        #                         waypoints.append(wps[i])
-        #                         break
-        #             elif wps[0].junction_id==238: #Hardcoding a troublemaker
-        #                 for i in range(len(wps)):
-        #                     if wps[i].road_id==271 and wps[i].lane_id==-1:
-        #                         waypoints.append(wps[i])
-        #                         break
-        #             else:
-        #                 for i in range(len(wps)):
-        #                     if str(wps[i].lane_change)=='Left':
-        #                         waypoints.append(wps[i])
-        #                         break
-        #         else:
-        #             waypoints.append(wps[0])
+                nwp1 = map.get_waypoint_xodr(int(self.route[route_index,0]),int(self.route[route_index,1]),self.route[route_index,0])
+                nwp_x = nwp.trasform.location.x
+                nwp_y = nwp.trasform.location.y
+                nwp_z = nwp.trasform.location.z
+
+                nwp1_x = nwp1.trasform.location.x
+                nwp1_y = nwp1.trasform.location.y
+                nwp1_z = nwp1.trasform.location.z
+
+                num_samples = int(np.sqrt((nwp_x-nwp1_x)**2+(nwp_y-nwp1_y)**2+(nwp_z-nwp1_z)**2)/(max_dist/number))
+
+                x_interp_array = np.linspace(nwp_x,nwp1_x,num_samples)
+                y_interp_array = np.linspace(nwp_y,nwp1_z,num_samples)
+                z_interp_array = np.linspace(nwp_z,nwp1_z,num_samples)
+
+                for j in range(min(num_samples,number-i)):
+                    loc_4 = [x_interp_array[j],y_interp_array[j],z_interp_array[j],1] 
+                    locations[i+j,:] = np.array(loc_4)
+            i = i+j+1 
+            route_index = (route_index+1)%self.route.shape[0]
+ 
+                    
+        
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
-        # print(mat)
-        # waypoints = self.waypoints2locations(wps)
+        print(locations)
         waypoints = locations
-        # if nwp.road_id == 1959:
-        #     print(nwp.is_junction)
-        #print("="*40)
-        #print("="*40)
-        #print(waypoints)
-        #print("="*40)
-        #print(mat)
+        
         body_waypoints = np.zeros(shape=(len(waypoints),2))
         # Turn into 2d coords in car frame
         for i in range(len(waypoints)):
             waypoints[i] = mat@waypoints[i]
             temp = waypoints[i]/waypoints[i,3]
             body_waypoints[i] = temp[:2]
-        #print("="*40)
-        #print(waypoints)
-        #print("="*40)
-        #print("="*40)
-        # if temp_var:
-        #     print(body_waypoints)
-        return body_waypoints
-    
-    def waypointfileProcessorint(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=int(column_data[i][0])
-        return column_data
-    
-    def waypointfileProcessorfloat(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=float(column_data[i][0])
-        return column_data
-    
-    def waypoints2locations(self,waypoints):
-        locations = np.zeros(shape=(len(waypoints),4))
-        for i in range(len(waypoints)):
-            carla_loc = waypoints[i].transform.location
-            loc_4 = [carla_loc.x,carla_loc.y,carla_loc.z,1] 
-            loc_3 = [carla_loc.x,carla_loc.y,carla_loc.z]
-            loc_2 = [carla_loc.x,carla_loc.y]
-            locations[i,:] = np.array(loc_4)
-        return locations
         
-    def createwaypointlist(self):
-        waypointids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/waypointIDS.csv')
-        waypointroadids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointRoadIDS.csv')
-        waypointlaneids=self.waypointfileProcessorint('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointLaneIDs.csv')
-        waypointdistances=self.waypointfileProcessorfloat('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/WaypointDistances.csv')
-        waypoints=[]
-        for i in range(len(waypointids)):
-            wps=map.get_waypoint_xodr(waypointroadids[i],waypointlaneids[i],waypointdistances[i])
-            waypoints.append(wps)
-        return waypoints
+        return body_waypoints
     
     
 
@@ -919,9 +890,13 @@ class HUD(object):
         self._info_text = []
         self._server_clock = pygame.time.Clock()
         # print(self._server_clock) #nonactive print
-        # Max additions for auto-drive id
+        # Maeve additions for auto-drive id
         self.controller = None
         self.autodrive = True
+        self.turn = 0
+        self.lane = "IDK"
+        self.score = 0
+        self.cooldowntim = time.time()
 
     def on_world_tick(self, timestamp):
         self._server_clock.tick()
@@ -930,20 +905,42 @@ class HUD(object):
         self.simulation_time = timestamp.elapsed_seconds
 
     def tick(self, world, clock):
+        # print("HUD tick")
         self._notifications.tick(world, clock)
         if not self._show_info:
             return
         t = world.player.get_transform()
         v = world.player.get_velocity()
         c = world.player.get_control()
+
+        w27 = world.world.get_map().get_waypoint(t.location,project_to_road=True, lane_type=(carla.LaneType.Driving | carla.LaneType.Shoulder | carla.LaneType.Sidewalk))
+
+        if str(w27.right_lane_marking.type) == 'Solid':
+            self.lane = 'Right'
+            self.score+=1/200*self.speed_kmh/(1.6*40)
+        elif str(w27.right_lane_marking.type) == 'Broken':
+            self.lane = 'Left'
+        elif w27.is_junction:
+            self.score+=1/200*self.speed_kmh/(1.6*40)
+            # self.lane = 'Junction'
+
+        else:
+            self.score+=1/200*self.speed_kmh/(1.6*40)
+            self.lane = "IDK"
+        
+
         heading = 'N' if abs(t.rotation.yaw) < 89.5 else ''
         heading += 'S' if abs(t.rotation.yaw) > 90.5 else ''
         heading += 'E' if 179.5 > t.rotation.yaw > 0.5 else ''
         heading += 'W' if -0.5 > t.rotation.yaw > -179.5 else ''
+
         colhist = world.collision_sensor.get_collision_history()
         collision = [colhist[x + self.frame - 200] for x in range(0, 200)]
         max_col = max(1.0, max(collision))
         collision = [x / max_col for x in collision]
+        if sum(collision) > 0 and time.time()-self.cooldowntim >5:
+            self.cooldowntim = time.time()
+            self.score -= 10
         vehicles = world.world.get_actors().filter('vehicle.*')
         self.speed_kmh = (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2))
         self._info_text = [
@@ -988,7 +985,7 @@ class HUD(object):
                     break
                 vehicle_type = get_actor_display_name(vehicle, truncate=22)
                 self._info_text.append('% 4dm %s' % (d, vehicle_type))
-        # Max -- Getting autodrive from the blended controller
+        # Maeve -- Getting autodrive from the blended controller
         if self.controller is not None:
             try:
                 self.autodrive = self.controller._agent.in_control
@@ -1004,6 +1001,9 @@ class HUD(object):
 
     def error(self, text):
         self._notifications.set_text('Error: %s' % text, (255, 0, 0))
+    
+
+
 
     def render(self, display):
         if self._show_info:
@@ -1040,7 +1040,7 @@ class HUD(object):
                     surface = self._font_mono.render(item, True, (255, 255, 255))
                     display.blit(surface, (8, v_offset))
                 v_offset += 18
-        ## BEGIN MAX_ADDED_BIT
+        ## BEGIN Maeve_ADDED_BIT
         # This bit makes the box on the screen that handles the speedometer 
         # and autodrive warning
         speed_size = [200,100]
@@ -1053,15 +1053,31 @@ class HUD(object):
         """
         speedometer.fill(pygame.color.Color(0,128,0))
         speedometer_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.70]
+        signal_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.70+25]
+        display.blit(speedometer, speedometer_loc)
+        lane_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.70+75]
+        score_loc = [((self.dim[0]-speed_size[0])//2)*1.04, self.dim[1]*.70+50]
         display.blit(speedometer, speedometer_loc)
         speedometer_loc[0] += speed_size[0]//20
         #autodrive_output = ["Dis"," En"]
+        lane = self._font_speed.render("       "+self.lane, True, (255, 255, 255))
         speed = self._font_speed.render("     {:3.0f} MPH".format(self.speed_kmh/1.6), True, (255, 255, 255))
+        scorerxt = self._font_speed.render("     {:3.0f} Points".format(round(self.score)), True, (255, 255, 255))
         display.blit(speed, speedometer_loc)
         #auto_drive = self._font_speed.render("AutoDrive {}abled".format(autodrive_output[self.autodrive]),True,(255,255,255))
         speedometer_loc[1] += speed_size[1]//2
+        if self.turn == -1:
+            turnsignal_left = self._font_speed.render("<--", True, (255, 255, 255))
+            display.blit(turnsignal_left, signal_loc)
+        if self.turn == 1:
+            turnsignal_right = self._font_speed.render("                 -->", True, (255, 255, 255))
+            display.blit(turnsignal_right, signal_loc)
+        display.blit(lane, lane_loc)
+        display.blit(scorerxt, score_loc)
+        
+
         #display.blit(auto_drive,speedometer_loc)
-        ## END MAX_ADDED_BIT
+        ## END Maeve_ADDED_BIT
         self._notifications.render(display)
         self.help.render(display) #uncomment for HUD
 
@@ -1328,94 +1344,18 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
-#Lap Tracking
-class Lapping():
-    def __init__(self,waypointroadids,waypointlaneids,waypointdistances,worldobject,worldcarla,simtime,agent):
-        """A function to intialize an Obstacles spawing object
-        
-        Given: 
-        waypointroadids: The string of the location of the csv file with waypoint roadids
-        waypointlaneids: The string of the location of the csv file with waypoint laneids
-        waypointdistances: The string of the location of the csv file with waypoint distances
-        worldobject: The world as the object class defined in this file
-        worldcarla: The carla world object
-        """
-        self.waypointroadids = self.waypointfileProcessorint(waypointroadids)
-        self.waypointlaneids = self.waypointfileProcessorint(waypointlaneids)
-        self.waypointdistances = self.waypointfileProcessorfloat(waypointdistances)
-        self.worldobject=worldobject
-        self.obstacles = worldobject.obstacles
-        self.worldcarla=worldcarla
-        self.lapcount=0
-        self.vehicle=self.worldobject.player
-        self.map=self.worldcarla.get_map()
-        self.simtime=simtime
-        self.agent=agent
-        self.vehicle_spawn=self.map.get_waypoint_xodr(self.agent.waypointroadids[0],self.agent.waypointlaneids[0],self.agent.waypointdistances[0])
-        self.spawn_index = -5  
-        #self.reset(object_type, spawn_index)     
-        
-        
-    
-    def waypointfileProcessorint(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader, None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                column_data[i] = int(column_data[i][0])
-        return column_data
-        
-    def waypointfileProcessorString(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row[0].strip())
-        return column_data
-    
-    def waypointfileProcessorfloat(self,csv_file):
-        column_data = []
-        with open(csv_file) as file:
-            reader = csv.reader(file)
-            next(reader,None)
-            for row in reader:
-                column_data.append(row)
-            for i in range(len(column_data)):
-                 column_data[i]=float(column_data[i][0])
-        return column_data
-        
-        
-    def simulation_file(self):
-        current_pos = self.vehicle.get_location()
-        if current_pos.distance(self.vehicle_spawn.transform.location) < 10.0:
-            self.lapcount += 1
-            print('Lap ' + str(self.lapcount)) #active print
-            
-                
-                
-            if self.obstacles:
-                CONE(self.worldcarla,"static.prop.trafficcone01",self.lapcount)
 
-            self.simtime+=30 #Change to change the time it roughly takes to get out of the start zone
-            
-                
-    def timer(self,time):
-        if time-self.simtime>1:#Change to change the time between checks of being within the start zone
-            self.simtime=time
-            return True
-        else:
-            return False
-            
 #=============================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
 
 def game_loop(args):
+    """
+    Main loop of the simulation. It handles updating all the HUD information,
+    ticking the agent and, if needed, the world.
+    """
+
     pygame.init()
     pygame.font.init()
     world = None
@@ -1429,22 +1369,29 @@ def game_loop(args):
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         hud = HUD(args.width, args.height)
-        world = World(client.get_world(), hud, args.filter, args)
+
+        #Added
         agent = Agent(args)
+
+        world = World(client.get_world(), hud, agent, args.filter, args)
+
+        #Change camera to driver view
+        world.camera_manager.toggle_camera()
+
+        
+
         controller = BlendedControl(world,agent,args.weight)
+        
+        #Update the hud with the controller
         hud.add_controller(controller)
-        lap=Lapping('/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsRoadIDs.csv','/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsLaneIDs.csv', '/home/labstudent/carla/PythonAPI/isacc_gh_testing/Data/ExactObjectWaypointsS.csv',world,client.get_world(),hud.simulation_time,agent)
-        lap.simulation_file()
+        
         clock = pygame.time.Clock()
-        interval=1000
-        elapsed=0
-        timer=False
         while True:
             dt = clock.tick_busy_loop(60)
-            if controller.parse_events(world, clock, client.get_world()):
+           
+            if controller.parse_events(world, clock):
                 return
-            if lap.timer(hud.simulation_time):
-                lap.simulation_file()
+            
             world.tick(clock)
             world.render(display)
             pygame.display.flip()
@@ -1495,6 +1442,8 @@ def main():
         metavar='PATTERN',
         default='vehicle.*',
         help='actor filter (default: "vehicle.*")')
+    
+    #Thea added args
     argparser.add_argument(
         '-w', '--weight',
         default=1,
@@ -1504,10 +1453,20 @@ def main():
         '-o', '--obstacles',
         default=False,
         type=bool,
-        help='Obstacle presence (default on)')
+        help='Obstacle presence (default off)')
+    argparser.add_argument(
+        '-op', '--obstacles_present',
+        default=False,
+        type=bool,
+        help='Obstacle presence (default off)')
+    argparser.add_argument(
+        '-t', '--trial_type',
+        default='ABCD',
+        type=str,
+        help='Trial lap condtions order')
+  
     
     args = argparser.parse_args()
-    # print(args.obstacles) #active print
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
 
@@ -1518,7 +1477,7 @@ def main():
     
 
     try:
-
+        print("Start Game Loop, check")
         game_loop(args)
 
     except KeyboardInterrupt:
