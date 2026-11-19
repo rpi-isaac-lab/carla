@@ -785,10 +785,11 @@ class Agent():
 
         #Check if current route segment is a road
         if nwp.road_id == int(self.route[self.current_route_segment,0]) and nwp.lane_id == int(self.route[self.current_route_segment,1]):
-            
+            traffic_direction = math.copysign(1,nwp.next(1)[0].s-nwp.s)
+            route_direction = math.copysign(1,self.route[self.current_route_segment,2]-nwp.s)
             #number of waypoints to grab, direction of trafic != pos s
             np.abs(nwp.s-self.route[self.current_route_segment,2])/(max_dist/number)
-            if nwp.s<self.route[self.current_route_segment,2]:
+            if traffic_direction == route_direction:
                 wps = nwp.next_until_lane_end(max_dist/number)
             else:
                 wps = nwp.previous_until_lane_start(max_dist/number)
@@ -811,9 +812,11 @@ class Agent():
         route_index = self.current_route_segment
         route_index = (route_index+1)%self.route.shape[0]
         while i < number:
-            nwp = map.get_waypoint_xodr(int(self.route[route_index-1,0]),int(self.route[route_index-1,1]),self.route[route_index-1,0])
+            nwp = map.get_waypoint_xodr(int(self.route[route_index-1,0]),int(self.route[route_index-1,1]),self.route[route_index-1,2])
             if int(self.route[route_index-1,0]) == int(self.route[route_index,0]) and int(self.route[route_index-1,1]) == int(self.route[route_index,1]):
-                if self.route[route_index,2] < self.route[route_index-1,2]:
+                traffic_direction = math.copysign(1,nwp.next(1)[0].s-nwp.s)
+                route_direction = math.copysign(1,self.route[route_index,2]-nwp.s)
+                if traffic_direction != route_direction:
                     waypoints = nwp.previous_until_lane_start(max_dist/number)
                 else:
                     waypoints = nwp.next_until_lane_end(max_dist/number)
@@ -824,14 +827,15 @@ class Agent():
                     locations[i+j,:] = np.array(loc_4)
                 
             else:
-                nwp1 = map.get_waypoint_xodr(int(self.route[route_index,0]),int(self.route[route_index,1]),self.route[route_index,0])
-                nwp_x = nwp.trasform.location.x
-                nwp_y = nwp.trasform.location.y
-                nwp_z = nwp.trasform.location.z
+                nwp1 = map.get_waypoint_xodr(int(self.route[route_index,0]),int(self.route[route_index,1]),self.route[route_index,2])
+                print(self.route[route_index,:])
+                nwp_x = nwp.transform.location.x
+                nwp_y = nwp.transform.location.y
+                nwp_z = nwp.transform.location.z
 
-                nwp1_x = nwp1.trasform.location.x
-                nwp1_y = nwp1.trasform.location.y
-                nwp1_z = nwp1.trasform.location.z
+                nwp1_x = nwp1.transform.location.x
+                nwp1_y = nwp1.transform.location.y
+                nwp1_z = nwp1.transform.location.z
 
                 num_samples = int(np.sqrt((nwp_x-nwp1_x)**2+(nwp_y-nwp1_y)**2+(nwp_z-nwp1_z)**2)/(max_dist/number))
 
@@ -849,7 +853,7 @@ class Agent():
         
         # Get vehicle matrix
         mat = np.array(vehicle.get_transform().get_inverse_matrix())
-        print(locations)
+        # print(locations)
         waypoints = locations
         
         body_waypoints = np.zeros(shape=(len(waypoints),2))
